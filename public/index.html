@@ -12,53 +12,146 @@
 <body>
 <div id="app">
 
-  <!-- ================= TELA INICIAL ================= -->
+  <!-- ================= MENU INICIAL ================= -->
   <section id="scr-home" class="screen">
     <div class="home-wrap">
-      <div class="logo">FAST<span>HANDS</span></div>
-      <div class="sub">o jogo de cartas mais rápido da mesa ✋</div>
-
-      <div class="panel">
-        <label>Seu apelido</label>
-        <input id="in-name" maxlength="16" placeholder="Digite seu nome">
-        <div class="row gap">
-          <button id="btn-create" class="btn primary big">➕ Criar sala</button>
-          <button id="btn-quick" class="btn big">⚡ Entrada rápida</button>
+      <div class="profile-card">
+        <div id="home-avatar" class="home-avatar"></div>
+        <div class="pc-info">
+          <div class="pc-name" id="home-name">Jogador</div>
+          <div class="muted tiny" id="home-stats"></div>
         </div>
-        <div class="row gap">
-          <input id="in-code" maxlength="5" placeholder="Código da sala" style="text-transform:uppercase">
-          <button id="btn-join" class="btn">Entrar</button>
-        </div>
-        <button id="btn-library" class="btn ghost">🎙️ Minhas frases & memes</button>
+        <div class="coins-chip"><span>🪙</span><b class="coins-v">0</b></div>
       </div>
-
-      <div class="panel">
-        <div class="row between"><b>🌎 Salas públicas</b><button id="btn-refresh" class="btn small ghost">↻</button></div>
-        <div id="room-list" class="room-list"><div class="muted">Nenhuma sala pública agora. Crie a primeira!</div></div>
+      <div class="hero">
+        <div class="hero-cards"><i class="hc c1"></i><i class="hc c2"></i><i class="hc c3"></i><i class="hc c4"></i></div>
+        <div class="logo">FAST<span>HANDS</span></div>
+        <div class="sub">o jogo de cartas mais rápido da mesa ✋</div>
       </div>
-      <div class="muted center tiny">Protótipo v0.1 · nome e cartas originais</div>
+      <nav class="menu">
+        <button class="menu-btn play" data-go="scr-play"><span class="mi">▶</span><span class="mt"><b>JOGAR</b><small>Buscar partida, ver salas ou criar a sua</small></span><span class="chev">›</span></button>
+        <button class="menu-btn shop" data-go="scr-shop"><span class="mi">🛒</span><span class="mt"><b>LOJA</b><small>Gaste suas moedinhas em bonecos e acessórios</small></span><span class="chev">›</span></button>
+        <button class="menu-btn custom" data-go="scr-custom"><span class="mi">🎨</span><span class="mt"><b>PERSONALIZAR</b><small>Seu boneco, foto do rosto, sons e frases</small></span><span class="chev">›</span></button>
+        <button class="menu-btn settings" data-go="scr-settings"><span class="mi">⚙️</span><span class="mt"><b>CONFIGURAÇÕES</b><small>Suas regras, sons, letras e visual</small></span><span class="chev">›</span></button>
+      </nav>
+      <div class="muted center tiny">Protótipo v0.4 · nome e cartas originais</div>
     </div>
   </section>
 
-  <!-- ================= CRIAR SALA ================= -->
-  <section id="scr-create" class="screen hidden">
-    <div class="home-wrap">
-      <h2>Criar sala</h2>
-      <div class="panel">
-        <label>Nome da sala</label>
-        <input id="cr-name" maxlength="30" placeholder="Ex: Mesa dos amigos">
-        <div class="row gap wrap">
-          <label class="chk"><input type="radio" name="cr-vis" value="pub" checked> 🌎 Pública (qualquer um entra)</label>
-          <label class="chk"><input type="radio" name="cr-vis" value="priv"> 🔒 Fechada (só com código)</label>
+  <!-- ================= JOGAR ================= -->
+  <section id="scr-play" class="screen hidden">
+    <div class="home-wrap wide">
+      <div class="topnav"><button class="btn ghost back">← Voltar</button><h2>Jogar</h2><div class="coins-chip"><span>🪙</span><b class="coins-v">0</b></div></div>
+      <div class="tabs" data-tabs="play">
+        <button class="btn on" data-tab="search">⚡ Buscar online</button>
+        <button class="btn" data-tab="rooms">🌎 Ver salas</button>
+        <button class="btn" data-tab="create">➕ Criar sala</button>
+        <button class="btn" data-tab="code">🔑 Entrar com código</button>
+      </div>
+
+      <div class="tabpane" data-pane="search">
+        <div class="panel">
+          <b>O que você quer na partida?</b>
+          <div class="muted tiny">Escolha "Sim", "Não" ou "Tanto faz" pra cada regra. A busca só mostra salas que batem com tudo.</div>
+          <div id="search-reqs" class="reqs"></div>
+          <label class="chk"><input type="checkbox" id="search-waiting"> Só salas que ainda não começaram</label>
+          <button id="btn-search" class="btn primary big">🔍 Buscar partida</button>
         </div>
-        <label>Máximo de jogadores: <b id="cr-max-v">8</b></label>
-        <input id="cr-max" type="range" min="2" max="15" value="8">
+        <div class="panel"><b>Resultado</b><div id="search-results" class="room-list"><div class="muted">Clique em buscar.</div></div></div>
       </div>
-      <div class="panel"><b>Regras</b><div id="cr-rules" class="rules"></div></div>
-      <div class="row gap">
-        <button id="cr-back" class="btn ghost">← Voltar</button>
-        <button id="cr-go" class="btn primary big">Criar</button>
+
+      <div class="tabpane hidden" data-pane="rooms">
+        <div class="panel">
+          <div class="row between"><b>🌎 Salas abertas</b><button id="btn-refresh" class="btn small ghost">↻ Atualizar</button></div>
+          <div id="room-list" class="room-list"></div>
+          <div class="muted tiny">🔒 = precisa de senha. Salas "só convite" não aparecem aqui.</div>
+        </div>
       </div>
+
+      <div class="tabpane hidden" data-pane="create">
+        <div class="panel">
+          <label>Nome da sala</label>
+          <input id="cr-name" maxlength="30" placeholder="Ex: Mesa dos amigos">
+          <label>Tipo de sala</label>
+          <div class="seg" id="cr-vis">
+            <button data-v="public" class="on">🌎 Pública</button>
+            <button data-v="password">🔒 Privada com senha</button>
+            <button data-v="hidden">🙈 Privada sem senha</button>
+          </div>
+          <div class="muted tiny" id="cr-vis-help"></div>
+          <div id="cr-pass-box" class="hidden"><label>Senha</label><input id="cr-pass" maxlength="20" placeholder="Senha da sala"></div>
+          <label>Máximo de jogadores: <b id="cr-max-v">8</b></label>
+          <input id="cr-max" type="range" min="2" max="15" value="8">
+        </div>
+        <div class="panel">
+          <div class="row between wrap gap"><b>Regras</b>
+            <select id="cr-preset" class="select"></select></div>
+          <details><summary>Ver / mudar regras desta sala</summary><div id="cr-rules" class="rules"></div></details>
+        </div>
+        <button id="cr-go" class="btn primary big">Criar sala</button>
+      </div>
+
+      <div class="tabpane hidden" data-pane="code">
+        <div class="panel">
+          <label>Código da sala (5 letras)</label>
+          <div class="row gap"><input id="in-code" maxlength="5" placeholder="EX: K7P2Q" style="text-transform:uppercase"><button id="btn-join" class="btn primary">Entrar</button></div>
+          <div class="muted tiny">Se a sala tiver senha, ela vai ser pedida depois.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LOJA ================= -->
+  <section id="scr-shop" class="screen hidden">
+    <div class="home-wrap wide">
+      <div class="topnav"><button class="btn ghost back">← Voltar</button><h2>Loja</h2><div class="coins-chip big"><span>🪙</span><b class="coins-v">0</b></div></div>
+      <div class="muted tiny">Ganhe moedinhas jogando: +10 por partida, +1 por carta jogada e <b>+50 por vitória</b>!</div>
+      <div class="tabs" data-tabs="shop">
+        <button class="btn on" data-tab="base">🧍 Bonecos</button>
+        <button class="btn" data-tab="hat">🎩 Chapéus</button>
+        <button class="btn" data-tab="glasses">🕶️ Óculos</button>
+        <button class="btn" data-tab="extra">✨ Acessórios</button>
+      </div>
+      <div id="shop-grid" class="shop-grid"></div>
+    </div>
+  </section>
+
+  <!-- ================= PERSONALIZAR ================= -->
+  <section id="scr-custom" class="screen hidden">
+    <div class="home-wrap wide">
+      <div class="topnav"><button class="btn ghost back">← Voltar</button><h2>Personalizar</h2><div class="coins-chip"><span>🪙</span><b class="coins-v">0</b></div></div>
+      <div class="custom-grid">
+        <div class="panel preview-panel"><div id="cu-preview" class="cu-preview"></div><div class="pc-name center" id="cu-name"></div></div>
+        <div>
+          <div class="tabs" data-tabs="custom">
+            <button class="btn on" data-tab="look">🧍 Boneco</button>
+            <button class="btn" data-tab="photo">📷 Foto do rosto</button>
+            <button class="btn" data-tab="sounds">🔊 Sons</button>
+            <button class="btn" data-tab="phrases">💬 Frases</button>
+          </div>
+          <div class="tabpane panel" data-pane="look" id="cu-look"></div>
+          <div class="tabpane panel hidden" data-pane="photo" id="cu-photo"></div>
+          <div class="tabpane panel hidden" data-pane="sounds" id="cu-sounds"></div>
+          <div class="tabpane panel hidden" data-pane="phrases" id="cu-phrases"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CONFIGURAÇÕES ================= -->
+  <section id="scr-settings" class="screen hidden">
+    <div class="home-wrap wide">
+      <div class="topnav"><button class="btn ghost back">← Voltar</button><h2>Configurações</h2><span></span></div>
+      <div class="tabs" data-tabs="settings">
+        <button class="btn on" data-tab="general">👤 Geral</button>
+        <button class="btn" data-tab="sound">🔊 Sons</button>
+        <button class="btn" data-tab="ui">🖥️ Interface</button>
+        <button class="btn" data-tab="rules">📜 Minhas regras</button>
+      </div>
+      <div class="tabpane panel" data-pane="general" id="st-general"></div>
+      <div class="tabpane panel hidden" data-pane="sound" id="st-sound"></div>
+      <div class="tabpane panel hidden" data-pane="ui" id="st-ui"></div>
+      <div class="tabpane panel hidden" data-pane="rules" id="st-rules"></div>
     </div>
   </section>
 
@@ -74,6 +167,8 @@
           <button id="lb-leave" class="btn small danger">Sair</button>
         </div>
       </div>
+      <div id="lb-wait" class="wait-note hidden">🎮 Tem uma partida rolando agora. Você entra automaticamente na próxima rodada!
+        <button id="lb-watch" class="btn small primary">👀 Assistir o jogo</button></div>
       <div class="lobby-grid">
         <div class="panel">
           <div class="row between"><b>Jogadores <span id="lb-count"></span></b>
@@ -82,12 +177,15 @@
           <div class="host-only">
             <label>Máximo de jogadores: <b id="lb-max-v"></b></label>
             <input id="lb-max" type="range" min="2" max="15">
-            <label class="chk"><input type="checkbox" id="lb-public"> Sala pública</label>
+            <label>Tipo de sala</label>
+            <div class="seg small" id="lb-vis-seg">
+              <button data-v="public">🌎 Pública</button><button data-v="password">🔒 Senha</button><button data-v="hidden">🙈 Só convite</button>
+            </div>
           </div>
           <button id="lb-start" class="btn primary big host-only">▶ COMEÇAR PARTIDA</button>
           <div class="muted not-host">Esperando o dono da sala começar…</div>
         </div>
-        <div class="panel"><b>Regras</b> <span class="muted tiny not-host">(só o dono muda)</span><div id="lb-rules" class="rules"></div></div>
+        <div class="panel"><div class="row between wrap gap"><b>Regras</b> <select id="lb-preset" class="select host-only"></select><span class="muted tiny not-host">(só o dono muda)</span></div><div id="lb-rules" class="rules"></div></div>
         <div class="panel chat-panel"><b>Chat</b><div class="chat-box lobby-chat"></div>
           <form class="chat-form row gap"><input placeholder="Mensagem…" maxlength="200"><button class="btn small">Enviar</button></form></div>
       </div>
@@ -118,12 +216,14 @@
         <div class="row gap center-info"><span id="color-dot" class="color-dot"></span><span id="dir" class="dir">↻</span><span id="pending" class="pending hidden"></span></div>
         <div id="timer" class="timer"><div></div></div>
       </div>
+      <div id="turn-arrow" class="turn-arrow hidden"><span>➤</span></div>
+      <div id="slap-layer" class="slap-layer"></div>
     </div>
 
     <div class="bottom">
       <div class="actions">
         <button id="btn-pass" class="btn hidden">Passar ⏭</button>
-        <button id="btn-last" class="btn last" disabled>LAST!</button>
+        <button id="btn-last" class="btn last" disabled>✋ FAST HAND!</button>
       </div>
       <div id="hand" class="hand"></div>
       <div id="quickbar" class="quickbar"></div>
@@ -136,10 +236,10 @@
     </aside>
 
     <!-- 9: BATER NA MESA -->
-    <div id="slap" class="overlay slap hidden">
+    <div id="slap" class="slap hidden">
       <div class="slap-title">BATE NA MESA!</div>
       <button id="btn-slap" class="slap-btn">✋</button>
-      <div id="slap-info" class="muted"></div>
+      <div id="slap-info" class="slap-info"></div>
     </div>
     <div id="silence" class="silence hidden">🤫 SILÊNCIO DO 7</div>
   </section>
@@ -150,6 +250,8 @@
   <div id="flash" class="flash"></div>
   <div id="audios" style="display:none"></div>
 </div>
+<script src="catalog.js"></script>
+<script src="avatar.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
