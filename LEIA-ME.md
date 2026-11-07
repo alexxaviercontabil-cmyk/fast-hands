@@ -1,4 +1,4 @@
-# FAST HANDS — protótipo
+# FAST HANDS — protótipo v0.4
 
 Jogo de cartas online para 2 a 15 jogadores. Tem salas públicas e fechadas, regras que dá pra mudar, voz, frases e memes de áudio.
 
@@ -42,31 +42,46 @@ Use um site que hospeda o jogo de graça, como o **Render**:
 
 ## Como funciona o jogo
 
+**Menu inicial:** Jogar · Loja · Personalizar · Configurações.
+
+**Jogar**
+- **Buscar online:** você marca "Sim", "Não" ou "Tanto faz" pra cada regra, e o jogo acha as salas que batem. Se não achar, oferece criar uma sala com essas regras.
+- **Ver salas:** lista as salas abertas. Cada uma tem o botão **📜 Regras** pra ver as regras antes de entrar.
+- **Criar sala:** 🌎 Pública, 🔒 Privada com senha ou 🙈 Privada sem senha (só entra quem tiver o código/convite).
+- **Entrar numa sala que já está jogando:** você escolhe entre **assistir** ou **esperar no chat**. Nos dois casos entra na próxima rodada.
+
 | Ação | Como fazer |
 |---|---|
-| Jogar carta | Clique na carta. Se ela não puder ser jogada, **a tela treme**. O jogo não mostra quais cartas servem. |
-| Comprar | Clique no monte preto (atalho no PC: **C**) |
-| Passar | Aparece depois que você compra uma carta que serve |
-| **LAST!** | Acende quando você fica com 1 carta. Se não apertar antes do próximo jogador agir, você compra cartas (atalho: **L**) |
-| **9** | Aparece uma mão gigante: **todo mundo bate**. Quem bater por último, ou não bater, compra (atalho: **Espaço**) |
-| **0** | Quem joga escolhe alguém pra **trocar a mão** |
-| **7** | **Silêncio**: ninguém corta nem manda frase/meme até o próximo jogar |
-| **Cortar** | Tem a carta **idêntica** (mesma cor e número) à da mesa? Jogue fora da sua vez e o jogo continua a partir de você |
-| Coringa / +4 | Escolha a cor depois de jogar |
+| Jogar carta | Clique na carta. Se não puder, **a tela treme** (o jogo não mostra quais servem) |
+| Comprar | Clique no monte (atalho no PC: **C**) |
+| **FAST HAND!** | Acende quando você fica com 1 carta. Aparece um aviso gigante pra todo mundo. Se não apertar antes do próximo jogar, compra (atalho: **F**) |
+| **+2 / +4** | Você compra e, se tiver carta que serve, **ainda joga**. Se não tiver, passa sozinho |
+| **9** | Mãos voando: todo mundo bate na mesa. Quem bater por último compra (atalho: **Espaço**) |
+| **0** | Escolha com quem trocar a mão, ou **não troque com ninguém** |
+| **Coringa / +4** | Não dá pra **bater** (terminar) com coringa ou +4 como última carta: tem que comprar |
+| **7** | Silêncio: ninguém corta nem manda frase/som até o próximo jogar |
+| **Cortar** | Tem a carta **idêntica** (cor e número)? Jogue fora da vez. Os bots também cortam! |
 
-**Regras que o dono da sala pode mudar:** coringa, +4, +2, bloqueio, inverter, efeitos do 9/0/7, cortar, acumular +2/+4, comprar até servir, cartas iniciais, multas, tempo por jogada e quantidade de baralhos. No automático, o jogo usa mais baralhos quando tem muita gente.
+Toda vez que alguém pega cartas por castigo (+2, +4, FAST HAND esquecido, bater por último, tempo esgotado) aparece um aviso grande e um "+N" em cima da pessoa.
 
-**Frases e memes:** em **🎙️ Minhas frases & memes** você cria quantas frases quiser e grava (ou envia) vários áudios de até 8 segundos. Marque até **10 de cada** pra aparecerem nos botões durante a partida. Os áudios ficam salvos no seu navegador.
+**Loja:** ganhe moedinhas jogando (+10 por partida, +1 por carta jogada, **+50 por vitória**) e compre bonecos, chapéus, óculos e acessórios.
 
-**Voz:** clique em **🎧** pra entrar na conversa de voz e em **🎤** pra mutar.
+**Personalizar:** troque boneco, cores, chapéu, óculos e acessório. Coloque uma **foto do rosto** dentro da cabeça do boneco. Grave ou envie **sons de até 10 segundos** e crie **frases** (deboche, mensagem, comemoração). Até 10 de cada aparecem na partida.
+
+**Configurações:** apelido, vibração, atalhos, volumes (efeitos, sons dos outros, voz), tamanho das letras, tamanho das cartas, cor da mesa, animações e **Minhas regras** (crie conjuntos de regras do seu jeito pra usar ao criar salas).
 
 ---
 
 ## Limitações deste protótipo (próximos passos)
 
-- **Voz:** funciona na maioria das redes Wi-Fi. Em algumas redes de celular (4G/5G) ou de empresa, pode ser preciso adicionar um servidor "TURN" (ex: Twilio ou Metered), que é pago a partir de certo uso.
+- **Voz:** cada pessoa precisa clicar em **🎧** pra entrar na voz. Clicando de novo no 🎧 aparece o painel com a barrinha do seu microfone e o status de cada pessoa (🟢 conectado / 🔴 não conectou).
+  - Entre redes diferentes (ex: celular no 4G e PC no Wi-Fi), muitas vezes a conexão direta é bloqueada. Pra isso existe o servidor **TURN**. A Metered dá **20 GB/mês grátis**:
+    1. Crie conta grátis em https://dashboard.metered.ca/signup?tool=turnserver
+    2. No painel, pegue o link de credenciais. Ele tem este formato: `https://SEUAPP.metered.live/api/v1/turn/credentials?apiKey=SUACHAVE`
+    3. No Render, abra o serviço → **Environment** → adicione `METERED_URL` com esse link → salvar (ele reinicia sozinho).
 - Com 15 pessoas na voz, cada um conecta com todos. Funciona, mas pesa em celular fraco. Pra versão final, o ideal é um servidor de voz (ex: LiveKit).
-- Os jogadores ficam salvos só enquanto o servidor está ligado (não tem login nem ranking permanente ainda).
+- Moedinhas, itens, sons e frases ficam salvos **no aparelho/navegador** de cada jogador (protegidos contra trapaça por uma assinatura do servidor). Não tem login ainda, então se limpar o navegador ou trocar de aparelho, começa do zero.
+- Pra proteger as moedinhas, configure a variável `SECRET` no Render (Environment) com um texto aleatório e não mude mais.
 - **App de celular:** o jogo já funciona no navegador do celular e pode ser adicionado à tela inicial. Pra publicar na Play Store/App Store, dá pra empacotar essa mesma tela com o **Capacitor**.
 
 ## Arquivos
