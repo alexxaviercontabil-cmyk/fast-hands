@@ -1,4 +1,4 @@
-# FAST HANDS — protótipo v0.4
+# FAST HANDS — protótipo v0.5
 
 Jogo de cartas online para 2 a 15 jogadores. Tem salas públicas e fechadas, regras que dá pra mudar, voz, frases e memes de áudio.
 
@@ -57,10 +57,14 @@ Use um site que hospeda o jogo de graça, como o **Render**:
 | **FAST HAND!** | Acende quando você fica com 1 carta. Aparece um aviso gigante pra todo mundo. Se não apertar antes do próximo jogar, compra (atalho: **F**) |
 | **+2 / +4** | Você compra e, se tiver carta que serve, **ainda joga**. Se não tiver, passa sozinho |
 | **9** | Mãos voando: todo mundo bate na mesa. Quem bater por último compra (atalho: **Espaço**) |
-| **0** | Escolha com quem trocar a mão, ou **não troque com ninguém** |
+| **0** | Troca é opcional: escolha alguém, **não troque**, ou faça **todos passarem a mão** no sentido do jogo |
 | **Coringa / +4** | Não dá pra **bater** (terminar) com coringa ou +4 como última carta: tem que comprar |
 | **7** | Silêncio: ninguém corta nem manda frase/som até o próximo jogar |
 | **Cortar** | Tem a carta **idêntica** (cor e número)? Jogue fora da vez. Os bots também cortam! |
+
+**Humor dos bonecos:** quem é cortado ou bloqueado fica **congelado** 🧊 e triste; quem pega muitas cartas vai ficando **bravo** 💢 até aparecer uma **tempestade com raios** ⛈️ em cima dele (passa com o tempo e jogando cartas); quem está com 1 carta fica nervoso, com 2 fica feliz, e quem vence comemora 🎉.
+
+**Música:** o jogo compõe a música ao vivo (calma no menu, animada na partida e mais acelerada quando alguém está de FAST HAND ou na hora de bater na mesa). Ajuste o volume em Configurações → Sons.
 
 Toda vez que alguém pega cartas por castigo (+2, +4, FAST HAND esquecido, bater por último, tempo esgotado) aparece um aviso grande e um "+N" em cima da pessoa.
 

@@ -319,7 +319,7 @@ function actPlay(room, pid, { cardId, color, target } = {}) {
   if (card.color === 'w' && !COLORS.includes(color)) return 'Escolha uma cor';
   let targetId = null;
   if (card.value === '0' && g.rules.zero && !g.rules.zeroRotate) {
-    if (target === 'none') targetId = 'none';
+    if (target === 'none' || target === 'all') targetId = target;
     else if (!g.order.includes(target) || target === pid) return 'Escolha com quem trocar a mão';
     else targetId = target;
   }
@@ -335,6 +335,8 @@ function actPlay(room, pid, { cardId, color, target } = {}) {
   const name = memberName(room, pid);
 
   if (jump) {
+    const cut = currentId(g);
+    if (cut && cut !== pid) fx(room, { type: 'cut', who: cut, by: pid });
     g.turn = g.order.indexOf(pid);
     g.pending = 0; g.pendingType = null;
     log(room, `⚡ ${name} CORTOU a vez com ${cardName(card)}!`);
@@ -355,7 +357,7 @@ function actPlay(room, pid, { cardId, color, target } = {}) {
   let penaltyVictim = null, penaltyAmt = 0;
   const v = card.value;
   const n = g.order.length;
-  if (v === 'skip') { steps = 2; log(room, `⛔ ${memberName(room, g.order[nextIndex(g, 1)])} foi bloqueado`); }
+  if (v === 'skip') { const sk = g.order[nextIndex(g, 1)]; steps = 2; log(room, `⛔ ${memberName(room, sk)} foi bloqueado`); fx(room, { type: 'skip', who: sk, by: pid }); }
   else if (v === 'rev') { g.dir *= -1; if (n === 2) steps = 2; log(room, '🔄 Sentido invertido'); }
   else if (v === 'd2' || v === 'w4') {
     const amt = v === 'd2' ? 2 : 4;
@@ -365,10 +367,10 @@ function actPlay(room, pid, { cardId, color, target } = {}) {
       give(room, victim, amt);
       fx(room, { type: 'draw', who: victim, n: amt, reason: v, by: pid });
       if (g.rules.penaltyPlay) { penaltyVictim = victim; penaltyAmt = amt; }
-      else { log(room, `${memberName(room, victim)} comprou ${amt} e perdeu a vez`); steps = 2; }
+      else { log(room, `${memberName(room, victim)} comprou ${amt} e perdeu a vez`); fx(room, { type: 'skip', who: victim, by: pid }); steps = 2; }
     }
   } else if (v === '0' && g.rules.zero) {
-    if (g.rules.zeroRotate) {
+    if (g.rules.zeroRotate || targetId === 'all') {
       const hands = g.order.map(id => g.hands[id]);
       g.order.forEach((id, i) => { g.hands[id] = hands[(((i - g.dir) % n) + n) % n]; g.called[id] = false; });
       log(room, `🔀 ${name} jogou 0: todo mundo passou a mão pro lado!`);
