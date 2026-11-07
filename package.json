@@ -1,0 +1,8 @@
+{
+  "name": "fast-hands",
+  "version": "0.1.0",
+  "description": "FAST HANDS - jogo de cartas online (protótipo)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

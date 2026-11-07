@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b1d16">
+<title>FAST HANDS</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg">
+</head>
+<body>
+<div id="app">
+
+  <!-- ================= TELA INICIAL ================= -->
+  <section id="scr-home" class="screen">
+    <div class="home-wrap">
+      <div class="logo">FAST<span>HANDS</span></div>
+      <div class="sub">o jogo de cartas mais rápido da mesa ✋</div>
+
+      <div class="panel">
+        <label>Seu apelido</label>
+        <input id="in-name" maxlength="16" placeholder="Digite seu nome">
+        <div class="row gap">
+          <button id="btn-create" class="btn primary big">➕ Criar sala</button>
+          <button id="btn-quick" class="btn big">⚡ Entrada rápida</button>
+        </div>
+        <div class="row gap">
+          <input id="in-code" maxlength="5" placeholder="Código da sala" style="text-transform:uppercase">
+          <button id="btn-join" class="btn">Entrar</button>
+        </div>
+        <button id="btn-library" class="btn ghost">🎙️ Minhas frases & memes</button>
+      </div>
+
+      <div class="panel">
+        <div class="row between"><b>🌎 Salas públicas</b><button id="btn-refresh" class="btn small ghost">↻</button></div>
+        <div id="room-list" class="room-list"><div class="muted">Nenhuma sala pública agora. Crie a primeira!</div></div>
+      </div>
+      <div class="muted center tiny">Protótipo v0.1 · nome e cartas originais</div>
+    </div>
+  </section>
+
+  <!-- ================= CRIAR SALA ================= -->
+  <section id="scr-create" class="screen hidden">
+    <div class="home-wrap">
+      <h2>Criar sala</h2>
+      <div class="panel">
+        <label>Nome da sala</label>
+        <input id="cr-name" maxlength="30" placeholder="Ex: Mesa dos amigos">
+        <div class="row gap wrap">
+          <label class="chk"><input type="radio" name="cr-vis" value="pub" checked> 🌎 Pública (qualquer um entra)</label>
+          <label class="chk"><input type="radio" name="cr-vis" value="priv"> 🔒 Fechada (só com código)</label>
+        </div>
+        <label>Máximo de jogadores: <b id="cr-max-v">8</b></label>
+        <input id="cr-max" type="range" min="2" max="15" value="8">
+      </div>
+      <div class="panel"><b>Regras</b><div id="cr-rules" class="rules"></div></div>
+      <div class="row gap">
+        <button id="cr-back" class="btn ghost">← Voltar</button>
+        <button id="cr-go" class="btn primary big">Criar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= SALA DE ESPERA ================= -->
+  <section id="scr-lobby" class="screen hidden">
+    <div class="home-wrap wide">
+      <div class="row between wrap">
+        <div><h2 id="lb-name">Sala</h2>
+          <div class="muted">Código: <b id="lb-code" class="code">-----</b> <button id="lb-copy" class="btn small ghost">📋 copiar convite</button> <span id="lb-vis"></span></div>
+        </div>
+        <div class="row gap">
+          <button class="btn small voice-btn">🎧 Entrar na voz</button>
+          <button id="lb-leave" class="btn small danger">Sair</button>
+        </div>
+      </div>
+      <div class="lobby-grid">
+        <div class="panel">
+          <div class="row between"><b>Jogadores <span id="lb-count"></span></b>
+            <button id="lb-addbot" class="btn small host-only">🤖 + Bot</button></div>
+          <div id="lb-members" class="members"></div>
+          <div class="host-only">
+            <label>Máximo de jogadores: <b id="lb-max-v"></b></label>
+            <input id="lb-max" type="range" min="2" max="15">
+            <label class="chk"><input type="checkbox" id="lb-public"> Sala pública</label>
+          </div>
+          <button id="lb-start" class="btn primary big host-only">▶ COMEÇAR PARTIDA</button>
+          <div class="muted not-host">Esperando o dono da sala começar…</div>
+        </div>
+        <div class="panel"><b>Regras</b> <span class="muted tiny not-host">(só o dono muda)</span><div id="lb-rules" class="rules"></div></div>
+        <div class="panel chat-panel"><b>Chat</b><div class="chat-box lobby-chat"></div>
+          <form class="chat-form row gap"><input placeholder="Mensagem…" maxlength="200"><button class="btn small">Enviar</button></form></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PARTIDA ================= -->
+  <section id="scr-game" class="screen hidden">
+    <div class="topbar">
+      <div class="tb-left"><b class="logo-s">FH</b> <span id="gm-room"></span></div>
+      <div class="tb-right">
+        <button class="btn small voice-btn">🎧</button>
+        <button id="gm-mic" class="btn small hidden">🎤</button>
+        <button id="gm-sound" class="btn small">🔊</button>
+        <button id="gm-chat" class="btn small">💬<span id="chat-dot" class="dot hidden"></span></button>
+        <button id="gm-menu" class="btn small">⚙️</button>
+      </div>
+    </div>
+
+    <div id="table" class="table">
+      <div id="seats"></div>
+      <div class="midtable">
+        <div id="status" class="status"></div>
+        <div class="piles">
+          <div id="draw-pile" class="card back pile" title="Comprar"><span id="draw-count"></span></div>
+          <div id="discard" class="discard"></div>
+        </div>
+        <div class="row gap center-info"><span id="color-dot" class="color-dot"></span><span id="dir" class="dir">↻</span><span id="pending" class="pending hidden"></span></div>
+        <div id="timer" class="timer"><div></div></div>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div class="actions">
+        <button id="btn-pass" class="btn hidden">Passar ⏭</button>
+        <button id="btn-last" class="btn last" disabled>LAST!</button>
+      </div>
+      <div id="hand" class="hand"></div>
+      <div id="quickbar" class="quickbar"></div>
+    </div>
+
+    <aside id="side" class="side hidden">
+      <div class="row between"><b>Chat & jogadas</b><button id="side-close" class="btn small ghost">✕</button></div>
+      <div class="chat-box game-chat"></div>
+      <form class="chat-form row gap"><input placeholder="Mensagem…" maxlength="200"><button class="btn small">Enviar</button></form>
+    </aside>
+
+    <!-- 9: BATER NA MESA -->
+    <div id="slap" class="overlay slap hidden">
+      <div class="slap-title">BATE NA MESA!</div>
+      <button id="btn-slap" class="slap-btn">✋</button>
+      <div id="slap-info" class="muted"></div>
+    </div>
+    <div id="silence" class="silence hidden">🤫 SILÊNCIO DO 7</div>
+  </section>
+
+  <!-- ================= JANELAS (modal) ================= -->
+  <div id="modal" class="overlay hidden"><div class="modal"><div id="modal-body"></div></div></div>
+  <div id="toasts" class="toasts"></div>
+  <div id="flash" class="flash"></div>
+  <div id="audios" style="display:none"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
