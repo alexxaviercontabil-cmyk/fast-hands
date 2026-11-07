@@ -226,6 +226,7 @@ const RULES_META = [
   ['g', 'Jogadas'],
   ['jumpIn', 'Cortar a vez', 'bool', 'Carta IDÊNTICA (cor e número) entra fora da vez'],
   ['stacking', 'Acumular +2 / +4', 'bool'], ['w4OnD2', 'Pode jogar +4 em cima de +2', 'bool'],
+  ['d2OnW4', '+2 da cor escolhida em cima do +4', 'bool', 'Jogaram +4 e escolheram azul? Um +2 AZUL acumula e o próximo compra 6'],
   ['noWildFinish', 'Não pode bater com coringa', 'bool', 'A última carta não pode ser Coringa nem +4'],
   ['penaltyPlay', 'Comprou o +2/+4 e ainda joga', 'bool', 'Se tiver carta que serve, joga; se não, passa sozinho'],
   ['drawUntilPlay', 'Comprar até servir', 'bool'],
@@ -236,7 +237,7 @@ const RULES_META = [
   ['decks', 'Baralhos (0 = automático)', 'num', 0, 4]
 ];
 let DEFAULT_RULES = { handSize: 7, wild: true, wild4: true, draw2: true, skip: true, reverse: true, nine: true, zero: true, zeroRotate: false,
-  seven: true, sevenChat: false, jumpIn: true, stacking: true, w4OnD2: true, noWildFinish: true, penaltyPlay: true, drawUntilPlay: false,
+  seven: true, sevenChat: false, jumpIn: true, stacking: true, w4OnD2: true, d2OnW4: true, noWildFinish: true, penaltyPlay: true, drawUntilPlay: false,
   lastPenalty: 2, sevenPenalty: 2, slapPenalty: 2, turnTime: 30, decks: 0 };
 const ruleLabel = (k) => (RULES_META.find(x => x[0] === k) || [])[1] || k;
 function renderRules(box, rules, editable, onChange) {
@@ -790,7 +791,7 @@ function localCanPlay(g, c, rules) {
   if (rules.noWildFinish && g.hand && g.hand.length === 1 && c.color === 'w') return false;
   if (g.pending > 0) {
     if (g.pendingType === 'd2') return c.value === 'd2' || (c.value === 'w4' && rules.w4OnD2);
-    if (g.pendingType === 'w4') return c.value === 'w4';
+    if (g.pendingType === 'w4') return c.value === 'w4' || (c.value === 'd2' && rules.d2OnW4 && c.color === g.color);
     return false;
   }
   if (c.color === 'w') return true;
@@ -1470,7 +1471,7 @@ const TUT = [
       row(tc('y', 'rev'), '<b>Inverter</b> — o sentido do jogo muda.'),
       row(tc('r', 'd2'), '<b>+2</b> — o próximo compra 2 (dá pra acumular jogando outro +2).'),
       row(tc('w', 'wild'), '<b>Coringa</b> — joga em cima de qualquer coisa e você escolhe a cor.'),
-      row(tc('w', 'w4'), '<b>+4</b> — escolhe a cor e o próximo compra 4.'),
+      row(tc('w', 'w4'), '<b>+4</b> — escolhe a cor e o próximo compra 4. Se o próximo tiver um <b>+2 da cor escolhida</b>, joga em cima e soma: o seguinte compra <b>6</b>!'),
       row(tc('g', '9'), '<b>9</b> — todo mundo <b>bate na mesa</b>! Quem bater por último compra.'),
       row(tc('b', '0'), '<b>0</b> — você pode trocar de mão com alguém (se quiser).'),
       row(tc('r', '7'), '<b>7</b> — <b>silêncio</b>! Só quem está na vez pode jogar.')),
