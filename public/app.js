@@ -27,7 +27,7 @@ const store = {
 let PID = store.get('pid', null);
 if (!PID) { PID = 'p' + Math.random().toString(36).slice(2, 12); store.set('pid', PID); }
 const settings = Object.assign({
-  sound: true, sfxVol: 80, memeVol: 90, voiceVol: 100, tts: false, slapSounds: true, memes: true,
+  sound: true, music: true, musicVol: 45, sfxVol: 80, memeVol: 90, voiceVol: 100, tts: false, slapSounds: true, memes: true,
   vibrate: true, cardSize: 1, fontScale: 1, table: 'green', anim: true, shortcuts: true
 }, store.get('settings', {}));
 const saveSettings = () => { store.set('settings', settings); applyUI(); };
@@ -107,11 +107,16 @@ function sweep(f1, f2, dur, type = 'sine', v = 0.3, delay = 0) {
   o.connect(g).connect(c.destination); o.start(t); o.stop(t + dur + 0.02);
 }
 const r = (a, b) => a + Math.random() * (b - a);
+const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+const PENTA = [72, 74, 76, 79, 81, 84, 86, 88];
+const pickNote = () => mtof(PENTA[Math.floor(Math.random() * PENTA.length)]);
 const SFX = {
-  play: () => noise(0.08, 0.25, r(1800, 3200)),
-  draw: () => tone([500, 380], 0.06, 'triangle', 0.1),
-  myturn: () => tone([660, 880], 0.1, 'sine', 0.12),
-  bad: () => tone([180, 140], 0.12, 'square', 0.08),
+  play: () => { noise(0.05, 0.18, r(2500, 3500)); tone(pickNote(), 0.22, 'triangle', 0.09); },
+  draw: () => tone([mtof(67), mtof(64)], 0.08, 'triangle', 0.09),
+  myturn: () => tone([mtof(72), mtof(76), mtof(79)], 0.09, 'sine', 0.11),
+  bad: () => { tone(mtof(47), 0.16, 'square', 0.05); tone(mtof(48), 0.16, 'square', 0.04); },
+  freeze: () => { tone([mtof(96), mtof(91), mtof(88), mtof(84)], 0.07, 'triangle', 0.07); noise(0.25, 0.08, 7000); },
+  thunder: () => { noise(0.9, 0.35, 120); noise(0.3, 0.2, 400, 0.05); },
   // batida na mesa: cada uma diferente (tom, filtro e peso variam)
   slap: (n = 1, total = 4, mine = false) => {
     if (!settings.slapSounds) return noise(0.12, 0.4);
@@ -128,10 +133,83 @@ const SFX = {
   jump: () => tone([300, 600, 1200], 0.06, 'square', 0.08),
   swap: () => tone([400, 800, 400, 800], 0.07, 'triangle', 0.1),
   silence: () => tone([300, 250], 0.25, 'sine', 0.12),
-  win: () => tone([523, 659, 784, 1046, 784, 1046], 0.12, 'triangle', 0.13),
-  coins: () => tone([1318, 1568, 2093], 0.07, 'square', 0.05),
+  win: () => tone([mtof(72), mtof(76), mtof(79), mtof(84), mtof(79), mtof(84)], 0.12, 'triangle', 0.13),
+  coins: () => tone([mtof(88), mtof(91), mtof(96)], 0.07, 'square', 0.05),
   msg: () => tone(1200, 0.05, 'sine', 0.05)
 };
+// ----------------------------- MÚSICA (composta ao vivo, sem arquivos) -----------------------------
+// Dó maior: Cmaj7 - Am7 - Fmaj7 - G6. Os sons das cartas usam as mesmas notas, então tudo combina.
+const music = (() => {
+  const PROG = [[48, 52, 55, 59], [45, 48, 52, 55], [41, 45, 48, 52], [43, 47, 50, 52]];
+  const MODES = {
+    menu: { bpm: 78, kick: [], clap: [], hat: [6, 14], bass: [0, 10], arp: [0, 6, 12], arpOct: 24, padGain: 0.05 },
+    game: { bpm: 100, kick: [0, 8, 10], clap: [4, 12], hat: [2, 6, 10, 14], bass: [0, 3, 8, 11], arp: [0, 3, 6, 8, 11, 14], arpOct: 24, padGain: 0.04 },
+    tense: { bpm: 118, kick: [0, 4, 8, 12], clap: [4, 12], hat: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15], bass: [0, 2, 4, 6, 8, 10, 12, 14], arp: [0, 2, 4, 6, 8, 10, 12, 14], arpOct: 24, padGain: 0.035 }
+  };
+  let mode = null, c = null, out = null, delay = null, timer = null, step = 0, nextTime = 0, duckUntil = 0;
+  const level = () => (settings.sound && settings.music ? settings.musicVol / 100 : 0) * (Date.now() < duckUntil ? 0.35 : 1);
+  function ensure() {
+    c = audioCtx(); if (!c || out) return !!c;
+    out = c.createGain(); out.gain.value = 0;
+    const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+    delay = c.createDelay(); delay.delayTime.value = 0.36;
+    const fb = c.createGain(); fb.gain.value = 0.28; const wet = c.createGain(); wet.gain.value = 0.25;
+    delay.connect(fb).connect(delay); delay.connect(wet).connect(lp);
+    out.connect(lp).connect(c.destination);
+    return true;
+  }
+  const env = (g, t, a, peak, dur) => { g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); };
+  function osc(type, f, t, dur, peak, a = 0.01, send = false, filt = 0) {
+    const o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.value = f;
+    let node = o; if (filt) { const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = filt; o.connect(lp); node = lp; }
+    node.connect(g); g.connect(out); if (send) g.connect(delay);
+    env(g, t, a, peak, dur); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function noiseHit(t, dur, peak, type, f) {
+    const b = c.createBuffer(1, Math.max(1, c.sampleRate * dur), c.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    const s = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain();
+    s.buffer = b; fl.type = type; fl.frequency.value = f; s.connect(fl).connect(g).connect(out);
+    env(g, t, 0.002, peak, dur); s.start(t);
+  }
+  function kick(t) {
+    const o = c.createOscillator(), g = c.createGain(); o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+    o.connect(g).connect(out); env(g, t, 0.003, 0.32, 0.22); o.start(t); o.stop(t + 0.3);
+  }
+  function scheduleStep(st, t) {
+    const M = MODES[mode], pos = st % 16, chord = PROG[Math.floor(st / 16) % 4], s16 = 60 / M.bpm / 4;
+    if (pos === 0) chord.forEach((n, i) => { osc('triangle', mtof(n + 12), t, s16 * 16, M.padGain, 0.5, false, 1400); if (i % 2) osc('sine', mtof(n + 24) * 1.003, t, s16 * 16, M.padGain * 0.5, 0.8); });
+    if (M.bass.includes(pos)) osc('sine', mtof(chord[0] - 12 + (pos === 11 || pos === 14 ? 7 : 0)), t, s16 * 3, 0.16, 0.01, false);
+    if (M.kick.includes(pos)) kick(t);
+    if (M.clap.includes(pos)) noiseHit(t, 0.1, 0.07, 'bandpass', 1600);
+    if (M.hat.includes(pos)) noiseHit(t, 0.035, pos % 4 === 2 ? 0.05 : 0.025, 'highpass', 8000);
+    if (M.arp.includes(pos)) {
+      const idx = M.arp.indexOf(pos);
+      const n = chord[(idx + Math.floor(st / 16)) % chord.length] + M.arpOct + (mode === 'menu' && Math.random() < 0.3 ? 2 : 0);
+      osc('triangle', mtof(n), t, s16 * 2.5, mode === 'menu' ? 0.045 : 0.035, 0.005, true);
+    }
+  }
+  function tick() {
+    if (!c || !mode) return;
+    out.gain.setTargetAtTime(level(), c.currentTime, 0.25);
+    if (level() === 0) { nextTime = c.currentTime + 0.05; return; }
+    if (nextTime < c.currentTime) nextTime = c.currentTime + 0.05;
+    while (nextTime < c.currentTime + 0.15) { scheduleStep(step, nextTime); nextTime += 60 / MODES[mode].bpm / 4; step++; }
+  }
+  return {
+    set(m) {
+      if (m === mode) return;
+      const firstBar = !mode || m === 'menu' || mode === 'menu';
+      mode = m; if (firstBar) step = 0;
+      if (ensure() && !timer) timer = setInterval(tick, 30);
+    },
+    start() { if (ensure() && !timer && mode) timer = setInterval(tick, 30); },
+    duck(ms) { duckUntil = Date.now() + ms; }
+  };
+})();
+document.addEventListener('pointerdown', () => music.start());
+music.set('menu');
+
 function buzz(ms) { if (settings.vibrate && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) { } }
 
 // ----------------------------- REGRAS -----------------------------
@@ -212,6 +290,7 @@ function show(id) {
   const fn = { 'scr-home': renderHome, 'scr-play': renderPlay, 'scr-shop': renderShop, 'scr-custom': renderCustom, 'scr-settings': renderSettings }[id];
   if (fn && currentScreen !== id) fn();
   currentScreen = id;
+  if (id !== 'scr-game') music.set('menu');
 }
 let currentScreen = 'scr-home';
 function toast(msg, bad) {
@@ -592,7 +671,7 @@ function renderSettings() {
     h('div', { class: 'muted tiny', text: 'Seus itens e moedinhas ficam salvos neste aparelho/navegador.' }));
   // sons
   const So = $('#st-sound'); So.innerHTML = '';
-  So.append(chk('sound', '🔊 Efeitos sonoros ligados'), slider('sfxVol', 'Efeitos'), slider('memeVol', 'Sons/memes dos outros'), slider('voiceVol', 'Voz das pessoas'),
+  So.append(chk('sound', '🔊 Som ligado (tudo)'), chk('music', '🎵 Música de fundo'), slider('musicVol', 'Música'), slider('sfxVol', 'Efeitos'), slider('memeVol', 'Sons/memes dos outros'), slider('voiceVol', 'Voz das pessoas'),
     chk('memes', '😂 Tocar os sons/memes dos outros'), chk('slapSounds', '✋ Sons variados de batida na mesa'), chk('tts', '🗣️ Ler as frases em voz alta'));
   // interface
   const U = $('#st-ui'); U.innerHTML = '';
@@ -760,6 +839,14 @@ function renderGame() {
     if (bubble) s.append(bubble);
   });
   Object.values(keep).forEach(s => s.remove());
+  // meu boneco perto das cartas
+  const meAv = $('#me-av');
+  if (inGame) { meAv.classList.remove('hidden'); if (!$('.avatar-svg', meAv)) meAv.append(h('div', { class: 'avatar-svg' })); }
+  else meAv.classList.add('hidden');
+  allMoods(true);
+  // música acompanha o clima da partida
+  const tense = g.phase === 'slap' || g.pending >= 4 || S.members.some(m => m.inGame && m.count === 1);
+  music.set(g.phase === 'over' ? 'menu' : (tense ? 'tense' : 'game'));
 
   // --- mesa ---
   const d = $('#discard');
@@ -798,7 +885,7 @@ function renderGame() {
     arrow.classList.remove('hidden'); arrow.classList.toggle('mine', myTurn);
   } else arrow.classList.add('hidden');
   $('.bottom').classList.toggle('myturn', myTurn);
-  if (myTurn && prev.turn !== PID && g.phase === 'play') banner('🎯', 'É a sua vez!', 'SUA VEZ!', 'mine', PID);
+
   if (myTurn && prev.turn !== PID) { SFX.myturn(); buzz(60); }
   prev.turn = g.phase === 'play' ? g.turn : prev.turn;
 
@@ -873,7 +960,10 @@ function tryPlay(c) {
     if (!needTarget) return send(extra);
     const others = g.order.filter(id => id !== PID);
     modal([h('h3', { text: '🔀 Trocar a mão com quem?' }),
-      h('button', { class: 'btn', text: '🙅 Não trocar com ninguém', onclick: () => { closeModal(); send(Object.assign({ target: 'none' }, extra)); } }),
+      h('div', { class: 'row gap wrap' },
+        h('button', { class: 'btn', text: '🙅 Não trocar com ninguém', onclick: () => { closeModal(); send(Object.assign({ target: 'none' }, extra)); } }),
+        h('button', { class: 'btn', text: '🔄 Todos passam a mão (no sentido do jogo)', onclick: () => { closeModal(); send(Object.assign({ target: 'all' }, extra)); } })),
+      h('div', { class: 'muted tiny', text: 'Ou escolha uma pessoa pra trocar só com ela:' }),
       h('div', { class: 'targets' }, others.map(id => {
         const m = S.members.find(x => x.id === id) || { id, name: '?', count: 0 };
         return h('button', { class: 'btn row gap', onclick: () => { closeModal(); send(Object.assign({ target: id }, extra)); } },
@@ -937,7 +1027,83 @@ function clearHands(losers) {
   setTimeout(() => $$('#slap-layer .flyhand').forEach(el => el.animate([{ opacity: 1 }, { opacity: 0, transform: el.style.transform }], { duration: 400, fill: 'forwards' }).onfinish = () => el.remove()), 1300);
 }
 
-// ----- avisos grandes pra todo mundo -----
+// ----- HUMOR DOS BONECOS (feliz, triste, bravo, tempestade, congelado...) -----
+const moodState = {};
+const ms = (id) => moodState[id] || (moodState[id] = { anger: 0, sadUntil: 0, freezeUntil: 0, happyUntil: 0, partyUntil: 0 });
+function moodOf(id) {
+  const m = moodState[id], t = Date.now();
+  const mem = S && S.members.find(x => x.id === id);
+  if (m) {
+    if (m.freezeUntil > t) return 'frozen';
+    if (m.partyUntil > t) return 'party';
+    if (m.anger >= 6) return 'furious';
+    if (m.sadUntil > t) return 'sad';
+    if (m.anger >= 2.5) return 'angry';
+    if (m.happyUntil > t) return 'happy';
+  }
+  if (mem && S.game && S.game.phase === 'play' && mem.inGame) {
+    if (mem.count === 1) return 'nervous';
+    if (mem.count === 2) return 'happy';
+  }
+  return 'neutral';
+}
+const MOOD_FX = {
+  furious: '<div class="storm"><span class="cloud">☁️</span><span class="cloud c2">☁️</span><span class="bolt">⚡</span><span class="bolt b2">⚡</span><i class="rain"></i></div>',
+  angry: '<span class="puff">💢</span>',
+  frozen: '<span class="ice">❄️</span><span class="ice i2">❄️</span><span class="ice i3">❄️</span><div class="iceblock"></div>',
+  party: '<span class="conf">🎉</span><span class="conf c2">🎊</span>',
+  sad: '<span class="drop">💧</span>',
+  happy: '<span class="spark">✨</span>'
+};
+const lastMood = {};
+function applyMood(id, force) {
+  const el = id === PID ? $('#me-av') : $(`.seat[data-id="${id}"]`);
+  if (!el) return;
+  const mood = moodOf(id);
+  const holder = $('.avatar-svg', el);
+  if (!force && el.dataset.mood === mood) return;
+  if (lastMood[id] !== mood) {
+    if (mood === 'frozen') SFX.freeze();
+    if (mood === 'furious') SFX.thunder();
+    lastMood[id] = mood;
+  }
+  el.dataset.mood = mood;
+  if (holder) holder.innerHTML = AV.svg(id === PID ? look : (looks[id] || {}), id === PID ? 46 : 52, { bust: true, mood });
+  let fxl = $('.mood-fx', el);
+  if (!fxl) { fxl = h('div', { class: 'mood-fx' }); ($('.av', el) || el).append(fxl); }
+  fxl.className = 'mood-fx m-' + mood; fxl.innerHTML = MOOD_FX[mood] || '';
+  el.classList.toggle('is-frozen', mood === 'frozen');
+  el.classList.toggle('is-furious', mood === 'furious');
+}
+function allMoods(force) {
+  if (!S || !S.game) return;
+  S.game.order.forEach(id => applyMood(id, force));
+}
+setInterval(() => {
+  for (const m of Object.values(moodState)) m.anger = Math.max(0, m.anger - 0.12);
+  allMoods(false);
+}, 1000);
+function moodEvent(f) {
+  const t = Date.now();
+  const add = (id, k, ms2) => { ms(id)[k] = Math.max(ms(id)[k], t + ms2); };
+  switch (f.type) {
+    case 'cut': case 'skip': add(f.who, 'freezeUntil', 1800); add(f.who, 'sadUntil', 5000); if (f.by) add(f.by, 'happyUntil', 3000); break;
+    case 'draw':
+      if (['d2', 'w4', 'timeout'].includes(f.reason)) { ms(f.who).anger += f.n; if (f.by) add(f.by, 'happyUntil', 3000); }
+      else ms(f.who).anger += 0.4 * (f.n || 1);
+      break;
+    case 'penalty': ms(f.who).anger += f.n || 2; break;
+    case 'slapEnd': (f.losers || []).forEach(id => { ms(id).anger += f.n || 2; }); if (S && S.game) S.game.order.filter(id => !f.losers.includes(id)).forEach(id => add(id, 'happyUntil', 2000)); break;
+    case 'play': ms(f.who).anger = Math.max(0, ms(f.who).anger - 0.6); break;
+    case 'jump': add(f.who, 'happyUntil', 3000); break;
+    case 'swap': add(f.who, 'happyUntil', 2500); if (f.target && f.target !== 'all') add(f.target, 'sadUntil', 3500); break;
+    case 'win': add(f.who, 'partyUntil', 8000); if (S && S.game) S.game.order.filter(id => id !== f.who).forEach(id => add(id, 'sadUntil', 5000)); break;
+    case 'start': for (const k of Object.keys(moodState)) delete moodState[k]; break;
+  }
+  setTimeout(() => allMoods(false), 50);
+}
+
+// ----- avisos pra todo mundo -----
 let bannerQ = [], bannerBusy = false;
 function banner(icon, line1, line2, kind, who) {
   if (!S || !S.game) return;
@@ -946,12 +1112,16 @@ function banner(icon, line1, line2, kind, who) {
   if (!bannerBusy) nextBanner();
 }
 function nextBanner() {
+  // avisos ficam numa faixa na parte de baixo da mesa (não atrapalham o centro)
   const b = bannerQ.shift(); if (!b) { bannerBusy = false; return; }
-  bannerBusy = true;
-  const av = b.who ? avatarOf(b.who, 54, true) : null;
-  const el = h('div', { class: 'big-banner ' + (b.kind || '') }, av, h('div', {}, h('div', { class: 'l1', text: b.icon + ' ' + b.line1 }), h('div', { class: 'l2', text: b.line2 })));
-  $('#scr-game').append(el);
-  setTimeout(() => { el.classList.add('out'); setTimeout(() => { el.remove(); nextBanner(); }, 250); }, bannerQ.length ? 1100 : 1700);
+  const feed = $('#feed');
+  const av = b.who ? avatarOf(b.who, 34, true) : null;
+  const el = h('div', { class: 'feed-item ' + (b.kind || '') }, av, h('span', { class: 'fi-ic', text: b.icon }),
+    h('span', { class: 'fi-t' }, h('span', { class: 'l1', text: b.line1 + ' ' }), h('b', { class: 'l2', text: b.line2 })));
+  feed.prepend(el);
+  while (feed.children.length > 2) feed.lastChild.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 300); }, 2300);
+  setTimeout(nextBanner, 350);
 }
 function floatAt(id, n) {
   const t = $('#table').getBoundingClientRect();
@@ -967,7 +1137,7 @@ $('#gm-sound').onclick = () => { settings.sound = !settings.sound; saveSettings(
 $('#gm-menu').onclick = () => {
   const chk = (key, label) => { const i = h('input', { type: 'checkbox' }); i.checked = settings[key]; i.onchange = () => { settings[key] = i.checked; saveSettings(); }; return h('label', { class: 'chk' }, i, label); };
   modal([h('h3', { text: '⚙️ Opções' }),
-    chk('sound', '🔊 Efeitos sonoros'), chk('memes', '😂 Tocar sons/memes dos outros'), chk('tts', '🗣️ Ler frases em voz alta'), chk('vibrate', '📳 Vibrar'),
+    chk('sound', '🔊 Som ligado'), chk('music', '🎵 Música'), chk('memes', '😂 Tocar sons/memes dos outros'), chk('tts', '🗣️ Ler frases em voz alta'), chk('vibrate', '📳 Vibrar'),
     h('button', { class: 'btn', text: '📜 Ver regras da sala', onclick: () => showRules(S.room.rules) }),
     h('div', { class: 'muted tiny', text: 'Atalhos no PC: C = comprar · F = FAST HAND! · Espaço = bater na mesa' }),
     isHost() ? h('button', { class: 'btn', text: '⏹ Encerrar partida (voltar pra sala)', onclick: () => { closeModal(); socket.emit('game:stop'); } }) : null,
@@ -1004,7 +1174,7 @@ socket.on('phrase', ({ from, text }) => {
 });
 socket.on('meme', ({ from, label, audio }) => {
   if (from === PID) toast(`🔊 ${label}`); else showBubble(from, '🔊 ' + label, true);
-  if (settings.memes) { const a = new Audio(audio); a.volume = settings.memeVol / 100; a.play().catch(() => { }); }
+  if (settings.memes) { music.duck(4000); const a = new Audio(audio); a.volume = settings.memeVol / 100; a.play().catch(() => { }); }
 });
 
 // ----------------------------- VOZ (WebRTC) -----------------------------
@@ -1185,6 +1355,8 @@ socket.on('invalid', ({ reason }) => shake(reason));
 socket.on('left', () => { S = null; });
 socket.on('kicked', () => { voice.leave(); S = null; show('scr-play'); toast('Você foi removido da sala', true); });
 socket.on('fx', (f) => {
+  moodEvent(f);
+  if (f.type === 'cut') banner('🧊', `${f.who === PID ? 'Você' : nameOf(f.who)} foi`, 'CORTADO!', 'jump', f.who);
   const simple = { play: SFX.play, draw: SFX.draw, last: SFX.last, penalty: SFX.penalty, jump: SFX.jump, swap: SFX.swap, silence: SFX.silence, win: SFX.win }[f.type];
   if (simple) simple();
   if (f.type === 'slapStart') { $('#slap-layer').innerHTML = ''; SFX.slapStart(); buzz([40, 40, 40]); }

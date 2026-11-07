@@ -86,6 +86,41 @@
     chain: { front: () => `<path d="M34 72 Q50 94 66 72" stroke="#f5c21b" stroke-width="3" fill="none" stroke-dasharray="3 1.5"/><circle cx="50" cy="88" r="5" fill="#f5c21b" stroke="#c99a00"/><text x="47.5" y="91" font-size="7" font-weight="900" fill="#8a6a00">$</text>` }
   };
 
+  // ---------------- humor (carinhas) ----------------
+  // mood: happy | party | sad | angry | furious | frozen | nervous
+  function moodFace(m, L, photo) {
+    const ec = L.base === 'robot' ? '#18e0ff' : (L.base === 'ninja' ? '#111' : '#1b1b1b');
+    const st = (d, w = 2.6, c = ec) => `<path d="${d}" stroke="${c}" stroke-width="${w}" fill="none" stroke-linecap="round"/>`;
+    const eyesO = (r = 3.2) => `<ellipse cx="41" cy="45" rx="${r}" ry="${r + 0.8}" fill="${ec}"/><ellipse cx="59" cy="45" rx="${r}" ry="${r + 0.8}" fill="${ec}"/>`;
+    const tint = (c, o) => `<circle cx="50" cy="46" r="24" fill="${c}" opacity="${o}"/>`;
+    const cheeks = (c = '#ff6b6b', o = .5) => `<circle cx="35" cy="53" r="3.5" fill="${c}" opacity="${o}"/><circle cx="65" cy="53" r="3.5" fill="${c}" opacity="${o}"/>`;
+    const eyes = photo ? '' : null;
+    switch (m) {
+      case 'happy': case 'party':
+        return (photo ? '' : st('M36 46 Q41 40 46 46') + st('M54 46 Q59 40 64 46') + cheeks('#ff8a8a', .45)) +
+          `<path d="M40 53 Q50 67 60 53 Z" fill="#7a1f1f" stroke="${photo ? '#fff' : 'none'}"/><path d="M44 59 Q50 63 56 59" fill="#ff7a8a"/>`;
+      case 'sad':
+        return (photo ? '' : eyesO(2.8)) + st('M35 39 L46 35', 2.4) + st('M54 35 L65 39', 2.4) +
+          st('M42 60 Q50 53 58 60', 2.6, photo ? '#fff' : ec) + `<path d="M39 49 Q36.5 55 39 57.5 Q41.5 55 39 49Z" fill="#6ec6ff"/>`;
+      case 'angry':
+        return (photo ? '' : eyesO(2.8) + cheeks('#ff3b3b', .55)) + st('M34 35 L46 40', 3.2, '#3a1a0a') + st('M54 40 L66 35', 3.2, '#3a1a0a') +
+          st('M42 59 Q50 54 58 59', 2.8, photo ? '#fff' : ec);
+      case 'furious':
+        return tint('#ff2a2a', photo ? .3 : .38) + (photo ? '' : eyesO(2.6)) + st('M33 34 L46 41', 3.6, '#2a0a00') + st('M54 41 L67 34', 3.6, '#2a0a00') +
+          `<rect x="41" y="54" width="18" height="7" rx="2" fill="#fff" stroke="#2a0a00" stroke-width="1.5"/><path d="M47 54v7M53 54v7M41 57.5h18" stroke="#2a0a00" stroke-width="1"/>` +
+          `<path d="M64 24 l4 3 -1 -5 4 1 -3 -4" stroke="#ff1a1a" stroke-width="2.4" fill="none"/>`;
+      case 'frozen':
+        return tint('#9fe3ff', photo ? .45 : .5) + (photo ? '' : `<circle cx="41" cy="45" r="4.5" fill="#fff" stroke="${ec}" stroke-width="1.5"/><circle cx="59" cy="45" r="4.5" fill="#fff" stroke="${ec}" stroke-width="1.5"/><circle cx="41" cy="45" r="1.6" fill="${ec}"/><circle cx="59" cy="45" r="1.6" fill="${ec}"/>`) +
+          st('M40 58 q2.5 -3 5 0 t5 0 t5 0 t5 0', 2.2, photo ? '#fff' : '#1b4a6b') +
+          `<path d="M30 63 l2 6 2 -6 M40 68 l1.5 5 1.5 -5 M58 68 l1.5 5 1.5 -5 M66 63 l2 6 2 -6" fill="#dff6ff" stroke="#bfefff"/>` +
+          `<path d="M26 34 l4 2 M28 30 l1 5 M70 34 l4 -2 M72 30 l-1 5" stroke="#e6faff" stroke-width="1.6"/>`;
+      case 'nervous':
+        return (photo ? '' : `<circle cx="41" cy="45" r="4.2" fill="#fff" stroke="${ec}" stroke-width="1.4"/><circle cx="59" cy="45" r="4.2" fill="#fff" stroke="${ec}" stroke-width="1.4"/><circle cx="41" cy="46" r="1.5" fill="${ec}"/><circle cx="59" cy="46" r="1.5" fill="${ec}"/>`) +
+          `<ellipse cx="50" cy="58" rx="3" ry="2.6" fill="${photo ? '#fff' : '#7a1f1f'}"/><path d="M67 33 Q64 39 67 41 Q70 39 67 33Z" fill="#6ec6ff"/>`;
+    }
+    return '';
+  }
+
   function svg(lookIn, size = 64, opts = {}) {
     const L = Object.assign({}, DEFAULT, lookIn || {});
     if (!HEADS[L.base]) L.base = 'human';
@@ -94,12 +129,14 @@
     const ex = L.extra && EXTRAS[L.extra];
     const body = `<path d="M18 110 Q18 76 50 72 Q82 76 82 110Z" fill="${L.shirt}"/><path d="M42 72 Q50 80 58 72" fill="${shade(L.shirt, -0.25)}"/>
       <rect x="44" y="64" width="12" height="10" fill="${L.base === 'robot' ? '#7f8c8d' : (L.base === 'skeleton' ? '#e8e3d3' : (photo ? '#ddd' : (['alien', 'zombie'].includes(L.base) ? (L.base === 'alien' ? '#6bc07a' : '#7e9b6b') : L.skin)))}"/>`;
-    let head = HEADS[L.base](L, !photo);
+    const mood = opts.mood && opts.mood !== 'neutral' ? opts.mood : null;
+    let head = HEADS[L.base](L, !photo && !mood);
     if (photo) {
       head += `<clipPath id="${id}c"><circle cx="50" cy="46" r="22"/></clipPath>
         <image href="${photo}" x="28" y="24" width="44" height="44" preserveAspectRatio="xMidYMid slice" clip-path="url(#${id}c)"/>
         <circle cx="50" cy="46" r="22" fill="none" stroke="#fff" stroke-width="2.5"/>`;
     }
+    if (mood) head += moodFace(mood, L, !!photo);
     const parts = [
       ex && ex.back ? ex.back(L) : '',
       body,

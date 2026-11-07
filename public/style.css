@@ -381,3 +381,62 @@ body.noanim *{animation:none!important;transition:none!important}
 .seat.turn .av::after{content:"";position:absolute;left:50%;top:50%;width:58px;height:58px;transform:translate(-50%,-50%);border-radius:50%;background:radial-gradient(circle,#ffcc2e55,transparent 70%);z-index:-1}
 @media (max-width:700px),(max-height:560px){.seat.turn .av::before{width:54px;height:54px}.seat.turn .av::after{width:48px;height:48px}}
 .midtable{z-index:3}
+/* v0.5: faixa de avisos (embaixo da mesa, sem atrapalhar o centro) */
+.feed{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;z-index:8;pointer-events:none;width:min(560px,94%)}
+.feed-item{display:flex;align-items:center;gap:8px;background:#000c;border:2px solid #ffffff33;border-left:6px solid var(--accent);border-radius:14px;padding:4px 12px 4px 6px;
+  font-size:14px;max-width:100%;box-shadow:0 4px 14px #0008;animation:feedIn .3s cubic-bezier(.2,1.4,.4,1);backdrop-filter:blur(4px)}
+.feed-item:not(:first-child){opacity:.7;transform:scale(.94)}
+.feed-item .avatar-svg{width:30px;flex:none}
+.feed-item .fi-ic{font-size:20px}
+.feed-item .fi-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-item .l1{color:#ddd}.feed-item .l2{color:var(--accent);font-size:17px;font-weight:900}
+.feed-item.bad{border-left-color:var(--danger)}.feed-item.bad .l2{color:#ff7b80}
+.feed-item.fast{border-left-color:#ff5fa2;border-color:#ff5fa266;animation:feedIn .3s cubic-bezier(.2,1.4,.4,1),fastGlow .5s 3 alternate}
+.feed-item.fast .l2{color:#ff8ac4;font-size:20px;letter-spacing:1px}
+.feed-item.jump{border-left-color:#18e0ff}.feed-item.jump .l2{color:#7cecff}
+.feed-item.out{animation:feedOut .3s forwards}
+@keyframes feedIn{from{transform:translateY(20px) scale(.8);opacity:0}}
+@keyframes feedOut{to{transform:translateY(10px);opacity:0}}
+@keyframes fastGlow{to{box-shadow:0 0 22px #ff5fa2}}
+.big-banner{display:none!important}
+@media (max-width:700px){.feed-item{font-size:12px}.feed-item .l2{font-size:14px}.feed-item.fast .l2{font-size:16px}}
+
+/* meu boneco ao lado dos botões */
+.actions{position:relative}
+.me-av{position:absolute;left:4px;bottom:-4px;width:52px}
+.me-av .avatar-svg{width:46px}
+
+
+/* humor dos bonecos */
+.mood-fx{position:absolute;left:50%;top:0;width:0;height:0;pointer-events:none;z-index:3}
+.mood-fx>*{position:absolute}
+.puff{left:8px;top:-6px;font-size:18px;animation:puff .7s ease-in-out infinite alternate}
+@keyframes puff{to{transform:scale(1.35) rotate(15deg)}}
+.spark{left:10px;top:-8px;font-size:16px;animation:twinkle 1s infinite alternate}
+@keyframes twinkle{to{opacity:.3;transform:scale(.7) rotate(40deg)}}
+.drop{left:-24px;top:2px;font-size:14px;animation:dropFall 1.4s infinite}
+@keyframes dropFall{0%{opacity:0;transform:translateY(-4px)}30%{opacity:1}100%{opacity:0;transform:translateY(22px)}}
+.conf{left:-30px;top:-14px;font-size:20px;animation:bob .5s infinite alternate}.conf.c2{left:12px}
+/* tempestade em cima de quem está furioso */
+.storm{left:-34px;top:-40px;width:68px;height:44px}
+.storm .cloud{position:absolute;left:4px;top:0;font-size:30px;filter:grayscale(.6) brightness(.6);animation:cloudMove 2s ease-in-out infinite alternate}
+.storm .cloud.c2{left:28px;top:4px;font-size:26px;animation-delay:-1s}
+.storm .bolt{position:absolute;left:22px;top:22px;font-size:18px;opacity:0;animation:bolt 1.3s infinite}
+.storm .bolt.b2{left:40px;animation-delay:.65s}
+.storm .rain{position:absolute;left:8px;top:26px;width:52px;height:26px;background:repeating-linear-gradient(105deg,transparent 0 6px,#8fc8ff99 6px 7px);animation:rain .35s linear infinite;-webkit-mask:linear-gradient(#000,transparent);mask:linear-gradient(#000,transparent)}
+@keyframes cloudMove{to{transform:translateX(4px)}}
+@keyframes bolt{0%,62%{opacity:0}64%{opacity:1}68%{opacity:.2}72%{opacity:1}80%,100%{opacity:0}}
+@keyframes rain{to{background-position:6px 14px}}
+.seat.is-furious .avatar-svg{animation:rage .12s infinite}
+@keyframes rage{50%{transform:translateX(1.5px)}}
+/* congelado (quem foi cortado / bloqueado) */
+.is-frozen .avatar-svg{filter:saturate(.3) brightness(1.15) drop-shadow(0 0 8px #9fe3ff)!important;animation:shiver .09s 8}
+@keyframes shiver{50%{transform:translateX(-2px)}}
+.iceblock{left:-30px;top:2px;width:60px;height:58px;border-radius:12px;background:linear-gradient(135deg,#dff6ffaa,#7fd0ff55);border:2px solid #e6faffcc;box-shadow:inset 0 0 12px #fff,0 0 14px #9fe3ff;animation:iceIn .25s ease-out}
+@keyframes iceIn{from{transform:scale(1.6);opacity:0}}
+.ice{left:-34px;top:-6px;font-size:14px;animation:iceSpin 1.5s linear infinite}
+.ice.i2{left:20px;top:10px;animation-delay:-.5s}.ice.i3{left:-8px;top:-18px;animation-delay:-1s}
+@keyframes iceSpin{to{transform:rotate(360deg)}}
+@media (max-width:700px),(max-height:560px){.iceblock{left:-24px;width:48px;height:46px}.storm{transform:scale(.8);transform-origin:50% 100%}}
+.storm{top:-30px}
+.feed{bottom:6px}
