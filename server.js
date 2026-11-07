@@ -81,6 +81,7 @@ const DEFAULT_RULES = {
   penaltyPlay: true,    // depois de comprar o +2/+4 ainda joga se tiver carta (se não, passa sozinho)
   drawUntilPlay: false, // comprar até sair carta que serve
   lastPenalty: 2,       // cartas por esquecer de apertar FAST HAND!
+  sevenPenalty: 2,      // multa por "falar" no silêncio do 7 (carta errada, jogar fora da vez, frase/meme)
   slapPenalty: 2,       // cartas pra quem bater por último no 9
   turnTime: 30,         // segundos por jogada (0 = sem tempo)
   decks: 0              // baralhos (0 = automático pelo nº de jogadores)
@@ -113,6 +114,7 @@ function sanitizeRules(r = {}, base = DEFAULT_RULES) {
   }
   out.handSize = clamp(Math.round(out.handSize), 3, 15);
   out.lastPenalty = clamp(Math.round(out.lastPenalty), 0, 6);
+  out.sevenPenalty = clamp(Math.round(Number(out.sevenPenalty) || 0), 0, 6);
   out.slapPenalty = clamp(Math.round(out.slapPenalty), 0, 6);
   out.turnTime = clamp(Math.round(out.turnTime), 0, 120);
   out.decks = clamp(Math.round(out.decks), 0, 4);
@@ -293,6 +295,21 @@ function checkLastPenalty(room, actorId) {
   }
 }
 
+// Silêncio do 7: quem "fala" (carta errada, jogada fora da vez, frase/meme) compra a multa.
+function silencePenalty(room, pid, why) {
+  const g = room.game;
+  if (!g || !g.silence || g.phase !== 'play' || !g.hands[pid]) return false;
+  const n = room.rules.sevenPenalty;
+  if (!(n > 0)) return false;
+  g.silPen = g.silPen || {};
+  if (g.silPen[pid] && now() - g.silPen[pid] < 1200) return true; // anti-spam: 1 multa por vez
+  g.silPen[pid] = now();
+  give(room, pid, n);
+  log(room, `🤫 ${memberName(room, pid)} quebrou o silêncio do 7 (${why}) e comprou ${n}`);
+  fx(room, { type: 'penalty', who: pid, n, reason: 'seven' });
+  return true;
+}
+
 // ----------------------------- AÇÕES -----------------------------
 // Cada ação devolve uma string de erro (vira o "tremor" na tela) ou null se deu certo.
 function actPlay(room, pid, { cardId, color, target } = {}) {
@@ -307,14 +324,18 @@ function actPlay(room, pid, { cardId, color, target } = {}) {
   const isTurn = currentId(g) === pid;
   let jump = false;
 
+  const wrong = (msg, why) => {
+    if (g.silence && silencePenalty(room, pid, why)) return `🤫 Silêncio do 7! Você ${why} e comprou ${room.rules.sevenPenalty}`;
+    return msg;
+  };
   if (!isTurn) {
     if (g.rules.jumpIn && !g.silence && g.pending === 0 && t.color !== 'w' &&
         card.color === t.color && card.value === t.value) jump = true;
-    else return g.silence ? 'Silêncio do 7! Espere o próximo jogar' : 'Não é sua vez';
+    else return g.silence ? wrong('Silêncio do 7! Só quem está na vez pode jogar', 'jogou fora da vez') : 'Não é sua vez';
   } else {
-    if (g.hasDrawn && !g.penaltyDrawn && !g.rules.drawUntilPlay && card.id !== g.drawnCardId) return 'Depois de comprar, só pode jogar a carta comprada';
-    if (finishBlocked(g, card, hand)) return 'Não pode bater com coringa! Compre uma carta 🃏';
-    if (!canPlay(g, card)) return 'Essa carta não pode ser jogada';
+    if (g.hasDrawn && !g.penaltyDrawn && !g.rules.drawUntilPlay && card.id !== g.drawnCardId) return wrong('Depois de comprar, só pode jogar a carta comprada', 'jogou a carta errada');
+    if (finishBlocked(g, card, hand)) return wrong('Não pode bater com coringa! Compre uma carta 🃏', 'jogou a carta errada');
+    if (!canPlay(g, card)) return wrong('Essa carta não pode ser jogada', 'jogou a carta errada');
   }
   if (card.color === 'w' && !COLORS.includes(color)) return 'Escolha uma cor';
   let targetId = null;
@@ -888,22 +909,26 @@ io.on('connection', (socket) => {
   const silenced = (r) => r.game && r.game.silence && r.game.phase === 'play';
   socket.on('chat', ({ text } = {}) => {
     const r = room(); if (!r || limited('chat', 400)) return;
-    if (silenced(r) && r.rules.sevenChat) return reply('🤫 Silêncio do 7! Nem chat agora');
+    if (silenced(r) && r.rules.sevenChat) return talkedInSilence(r, 'escreveu no chat');
     text = String(text || '').trim().slice(0, 200); if (!text) return;
     r.chat.push({ from: p.pid, name: p.name, text, t: now() });
     if (r.chat.length > 80) r.chat.shift();
     sync(r);
   });
+  const talkedInSilence = (r, what) => {
+    if (r.game.hands[p.pid] && silencePenalty(r, p.pid, what)) { sync(r); return reply(`🤫 Silêncio do 7! Você falou e comprou ${r.rules.sevenPenalty}`); }
+    return reply('🤫 Silêncio do 7! Espere o próximo jogar');
+  };
   socket.on('phrase', ({ text } = {}) => {
     const r = room(); if (!r) return;
-    if (silenced(r)) return reply('🤫 Silêncio do 7! Espere o próximo jogar');
+    if (silenced(r)) return talkedInSilence(r, 'mandou frase');
     if (limited('say', 2000)) return reply('Calma! Espere 2 segundos');
     text = String(text || '').trim().slice(0, 80); if (!text) return;
     io.to(r.code).emit('phrase', { from: p.pid, name: p.name, text });
   });
   socket.on('meme', ({ label, audio } = {}) => {
     const r = room(); if (!r) return;
-    if (silenced(r)) return reply('🤫 Silêncio do 7! Espere o próximo jogar');
+    if (silenced(r)) return talkedInSilence(r, 'mandou meme');
     if (limited('say', 2000)) return reply('Calma! Espere 2 segundos');
     if (typeof audio !== 'string' || !audio.startsWith('data:audio') || audio.length > 1.4e6) return reply('Áudio inválido ou muito grande');
     io.to(r.code).emit('meme', { from: p.pid, name: p.name, label: String(label || '').slice(0, 30), audio });

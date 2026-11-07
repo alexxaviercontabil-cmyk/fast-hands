@@ -1,4 +1,4 @@
-# FAST HANDS — protótipo v0.5
+# FAST HANDS — protótipo v0.6
 
 Jogo de cartas online para 2 a 15 jogadores. Tem salas públicas e fechadas, regras que dá pra mudar, voz, frases e memes de áudio.
 
@@ -59,7 +59,7 @@ Use um site que hospeda o jogo de graça, como o **Render**:
 | **9** | Mãos voando: todo mundo bate na mesa. Quem bater por último compra (atalho: **Espaço**) |
 | **0** | Troca é opcional: escolha alguém, **não troque**, ou faça **todos passarem a mão** no sentido do jogo |
 | **Coringa / +4** | Não dá pra **bater** (terminar) com coringa ou +4 como última carta: tem que comprar |
-| **7** | Silêncio: ninguém corta nem manda frase/som até o próximo jogar |
+| **7** | Silêncio: até o próximo jogar, só quem está na vez joga. Carta errada, jogar fora da vez ou mandar frase/meme = "falou" e compra multa (padrão 2, ajustável) |
 | **Cortar** | Tem a carta **idêntica** (cor e número)? Jogue fora da vez. Os bots também cortam! |
 
 **Humor dos bonecos:** quem é cortado ou bloqueado fica **congelado** 🧊 e triste; quem pega muitas cartas vai ficando **bravo** 💢 até aparecer uma **tempestade com raios** ⛈️ em cima dele (passa com o tempo e jogando cartas); quem está com 1 carta fica nervoso, com 2 fica feliz, e quem vence comemora 🎉.
@@ -75,6 +75,10 @@ Toda vez que alguém pega cartas por castigo (+2, +4, FAST HAND esquecido, bater
 **Configurações:** apelido, vibração, atalhos, volumes (efeitos, sons dos outros, voz), tamanho das letras, tamanho das cartas, cor da mesa, animações e **Minhas regras** (crie conjuntos de regras do seu jeito pra usar ao criar salas).
 
 ---
+
+## Tutorial
+
+No menu tem **🎓 COMO JOGAR**: um passo a passo com mini-desafios (combinar cartas, comprar, FAST HAND!, cortar, bater no 9, silêncio do 7, humor do boneco). Quem entra pela primeira vez é convidado a fazer.
 
 ## Limitações deste protótipo (próximos passos)
 
