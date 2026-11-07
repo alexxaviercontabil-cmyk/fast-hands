@@ -32,9 +32,23 @@
         <button class="menu-btn play" data-go="scr-play"><span class="mi">▶</span><span class="mt"><b>JOGAR</b><small>Buscar partida, ver salas ou criar a sua</small></span><span class="chev">›</span></button>
         <button class="menu-btn shop" data-go="scr-shop"><span class="mi">🛒</span><span class="mt"><b>LOJA</b><small>Gaste suas moedinhas em bonecos e acessórios</small></span><span class="chev">›</span></button>
         <button class="menu-btn custom" data-go="scr-custom"><span class="mi">🎨</span><span class="mt"><b>PERSONALIZAR</b><small>Seu boneco, foto do rosto, sons e frases</small></span><span class="chev">›</span></button>
+        <button class="menu-btn tut" id="btn-tut"><span class="mi">🎓</span><span class="mt"><b>COMO JOGAR</b><small>Tutorial rápido pra quem tá começando</small></span><span class="chev">›</span></button>
         <button class="menu-btn settings" data-go="scr-settings"><span class="mi">⚙️</span><span class="mt"><b>CONFIGURAÇÕES</b><small>Suas regras, sons, letras e visual</small></span><span class="chev">›</span></button>
       </nav>
-      <div class="muted center tiny">Protótipo v0.4 · nome e cartas originais</div>
+      <div class="muted center tiny">Protótipo v0.6 · nome e cartas originais</div>
+    </div>
+  </section>
+
+  <!-- ================= TUTORIAL ================= -->
+  <section id="scr-tut" class="screen hidden">
+    <div class="home-wrap wide">
+      <div class="topnav"><button class="btn ghost back">← Voltar</button><h2>🎓 Como jogar</h2><div id="tut-count" class="muted tiny"></div></div>
+      <div id="tut-dots" class="tut-dots"></div>
+      <div id="tut-stage" class="panel tut-stage"></div>
+      <div class="row gap tut-nav">
+        <button id="tut-prev" class="btn">← Anterior</button>
+        <button id="tut-next" class="btn primary big">Próximo →</button>
+      </div>
     </div>
   </section>
 

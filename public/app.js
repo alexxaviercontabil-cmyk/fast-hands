@@ -221,7 +221,7 @@ const RULES_META = [
   ['nine', '9 = Bater na mesa', 'bool', 'Todo mundo bate; o último (ou quem não bater) compra'],
   ['zero', '0 = Trocar a mão', 'bool', 'Quem joga troca as cartas com alguém'],
   ['zeroRotate', '0 = Todo mundo passa a mão pro lado', 'bool', 'Em vez de escolher com quem trocar'],
-  ['seven', '7 = Silêncio', 'bool', 'Ninguém corta nem manda frase/meme até o próximo jogar'],
+  ['seven', '7 = Silêncio', 'bool', 'Até o próximo jogar, só quem está na vez joga. Carta errada, jogar fora da vez ou mandar frase/meme = multa'],
   ['sevenChat', 'Silêncio do 7 bloqueia o chat também', 'bool'],
   ['g', 'Jogadas'],
   ['jumpIn', 'Cortar a vez', 'bool', 'Carta IDÊNTICA (cor e número) entra fora da vez'],
@@ -231,12 +231,13 @@ const RULES_META = [
   ['drawUntilPlay', 'Comprar até servir', 'bool'],
   ['g', 'Números'],
   ['handSize', 'Cartas iniciais', 'num', 3, 15], ['lastPenalty', 'Multa por não gritar FAST HAND!', 'num', 0, 6],
+  ['sevenPenalty', 'Multa por quebrar o silêncio do 7', 'num', 0, 6],
   ['slapPenalty', 'Multa do 9 (último a bater)', 'num', 0, 6], ['turnTime', 'Tempo por jogada (seg, 0 = livre)', 'num', 0, 120],
   ['decks', 'Baralhos (0 = automático)', 'num', 0, 4]
 ];
 let DEFAULT_RULES = { handSize: 7, wild: true, wild4: true, draw2: true, skip: true, reverse: true, nine: true, zero: true, zeroRotate: false,
   seven: true, sevenChat: false, jumpIn: true, stacking: true, w4OnD2: true, noWildFinish: true, penaltyPlay: true, drawUntilPlay: false,
-  lastPenalty: 2, slapPenalty: 2, turnTime: 30, decks: 0 };
+  lastPenalty: 2, sevenPenalty: 2, slapPenalty: 2, turnTime: 30, decks: 0 };
 const ruleLabel = (k) => (RULES_META.find(x => x[0] === k) || [])[1] || k;
 function renderRules(box, rules, editable, onChange) {
   box.innerHTML = '';
@@ -287,7 +288,8 @@ function applyUI() {
 let screenStack = [];
 function show(id) {
   $$('.screen').forEach(s => s.classList.toggle('hidden', s.id !== id));
-  const fn = { 'scr-home': renderHome, 'scr-play': renderPlay, 'scr-shop': renderShop, 'scr-custom': renderCustom, 'scr-settings': renderSettings }[id];
+  if (id !== 'scr-tut' && typeof tutClear === 'function') tutClear();
+  const fn = { 'scr-tut': () => renderTut(), 'scr-home': renderHome, 'scr-play': renderPlay, 'scr-shop': renderShop, 'scr-custom': renderCustom, 'scr-settings': renderSettings }[id];
   if (fn && currentScreen !== id) fn();
   currentScreen = id;
   if (id !== 'scr-game') music.set('menu');
@@ -945,14 +947,17 @@ function tryPlay(c) {
   if (g.phase !== 'play') return shake();
   const rules = S.room.rules;
   const myTurn = g.turn === PID;
+  // Silêncio do 7: carta errada ou jogar fora da vez = "falou" → o servidor aplica a multa
+  const silent = g.silence && rules.seven && (rules.sevenPenalty || 0) > 0;
+  const tellServer = () => { if (silent) socket.emit('play', { cardId: c.id }); };
   if (!myTurn) {
     const t = g.top;
     const jump = rules.jumpIn && !g.silence && !g.pending && t.color !== 'w' && c.color === t.color && c.value === t.value;
-    if (!jump) return shake(g.silence ? '🤫 Silêncio do 7!' : null);
+    if (!jump) { if (silent) return tellServer(); return shake(g.silence ? '🤫 Silêncio do 7!' : null); }
   } else {
-    if (g.hasDrawn && !g.penaltyDrawn && !rules.drawUntilPlay && c.id !== g.drawnCardId) return shake('Só a carta que você comprou');
-    if (rules.noWildFinish && g.hand.length === 1 && c.color === 'w') return shake('Não pode bater com coringa! Compre uma carta 🃏');
-    if (!localCanPlay(g, c, rules)) return shake();
+    if (g.hasDrawn && !g.penaltyDrawn && !rules.drawUntilPlay && c.id !== g.drawnCardId) { if (silent) return tellServer(); return shake('Só a carta que você comprou'); }
+    if (rules.noWildFinish && g.hand.length === 1 && c.color === 'w') { if (silent) return tellServer(); return shake('Não pode bater com coringa! Compre uma carta 🃏'); }
+    if (!localCanPlay(g, c, rules)) { if (silent) return tellServer(); return shake(); }
   }
   const send = (extra = {}) => socket.emit('play', Object.assign({ cardId: c.id }, extra));
   const needTarget = c.value === '0' && rules.zero && !rules.zeroRotate && g.order.length > 1;
@@ -1368,7 +1373,12 @@ socket.on('fx', (f) => {
     if (f.losers.includes(PID)) setTimeout(() => shake(), 300);
   }
   if (f.type === 'last') { banner('✋', `${f.who === PID ? 'VOCÊ ESTÁ' : nameOf(f.who).toUpperCase() + ' ESTÁ'} DE`, 'FAST HAND!', 'fast', f.who); buzz([60, 40, 60]); }
-  if (f.type === 'penalty') { floatAt(f.who, f.n); banner('😬', `${who(f.who)} esqueceu o FAST HAND!`, `+${f.n} cartas`, 'bad', f.who); if (f.who === PID) shake(); }
+  if (f.type === 'penalty') {
+    floatAt(f.who, f.n);
+    if (f.reason === 'seven') banner('🤫', `${who(f.who)} quebrou o silêncio!`, `+${f.n} carta${f.n > 1 ? 's' : ''}`, 'bad', f.who);
+    else banner('😬', `${who(f.who)} esqueceu o FAST HAND!`, `+${f.n} cartas`, 'bad', f.who);
+    if (f.who === PID) { shake(); buzz(150); }
+  }
   if (f.type === 'jump') banner('⚡', `${who(f.who)}`, 'CORTOU A VEZ!', 'jump', f.who);
   if (f.type === 'draw' && f.n) {
     floatAt(f.who, f.n);
@@ -1394,8 +1404,204 @@ socket.on('fx', (f) => {
 })();
 setInterval(() => { if (!S && socket.connected && currentScreen === 'scr-play') socket.emit('lobby:list'); }, 5000);
 
+// ----------------------------- TUTORIAL (COMO JOGAR) -----------------------------
+// Passo a passo com mini-desafios. Roda só no navegador, não precisa de sala.
+let tutStep = 0, tutTimers = [], tutDone = {};
+const tutClear = () => { tutTimers.forEach(t => { clearTimeout(t); clearInterval(t); }); tutTimers = []; };
+const tLater = (fn, ms) => { const t = setTimeout(fn, ms); tutTimers.push(t); return t; };
+const tc = (color, value) => ({ id: 't' + Math.random().toString(36).slice(2, 8), color, value });
+function tutCard(c, onclick) { const e = cardEl(c); if (onclick) { e.classList.add('tut-click'); e.onclick = () => onclick(c, e); } return e; }
+function tutShake(el, msg) {
+  el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
+  SFX.bad(); buzz(100); if (msg) tutSay(msg, true);
+}
+function tutSay(msg, bad) {
+  const b = $('#tut-msg'); if (!b) return;
+  b.textContent = msg; b.className = 'tut-msg ' + (bad ? 'bad' : 'good');
+}
+function tutWin(msg) { tutSay(msg || '✅ Isso aí!'); SFX.coins(); tutDone[tutStep] = true; $('#tut-next').classList.add('pulse'); }
+function tutTable(top, label) {
+  return h('div', { class: 'tut-table' },
+    h('div', { class: 'tut-pile' }, h('div', { class: 'card back' }), h('small', { text: 'monte' })),
+    h('div', { class: 'tut-pile' }, top ? cardEl(top) : '', h('small', { text: label || 'mesa' })));
+}
+function tutHand(cards, onclick) { return h('div', { class: 'tut-hand' }, cards.map(c => tutCard(c, onclick))); }
+function tutBot(name, txt) {
+  const d = h('div', { class: 'tut-bot' }); d.innerHTML = AV.svg(Object.assign({}, look, { usePhoto: false, base: 'robot', shirt: '#2d7fe0' }), 40, { bust: true });
+  d.append(h('span', { text: name + (txt ? ' — ' + txt : '') })); return d;
+}
+const legal = (c, top) => c.color === 'w' || c.color === top.color || c.value === top.value;
+
+const TUT = [
+  { t: 'Bem-vindo ao FAST HANDS! ✋', render: (box) => {
+    box.append(
+      h('p', { html: 'O objetivo é simples: <b>ficar sem nenhuma carta na mão</b> antes de todo mundo.' }),
+      h('p', { html: 'Cada um começa com <b>7 cartas</b>. Na sua vez, você joga <b>uma carta</b> em cima da carta da mesa.' }),
+      tutHand([tc('r', '3'), tc('y', '8'), tc('b', 'skip'), tc('g', '5'), tc('w', 'wild')]),
+      h('p', { class: 'muted', html: 'Dica: o jogo <b>não mostra</b> quais cartas servem. Se você clicar numa carta errada, a tela <b>treme</b>. Fica esperto! 😉' }));
+  } },
+  { t: 'Combinar cartas', task: true, render: (box) => {
+    const top = tc('r', '5');
+    box.append(h('p', { html: 'Você pode jogar uma carta da <b>mesma cor</b> OU do <b>mesmo número/símbolo</b> da mesa.' }),
+      tutTable(top),
+      h('p', { class: 'tut-task', text: '👉 Desafio: clique numa carta que pode ser jogada em cima do 5 vermelho.' }),
+      tutHand([tc('g', '8'), tc('b', '5'), tc('y', '1'), tc('r', '2')], (c, e) => {
+        if (legal(c, top)) { e.classList.add('tut-played'); SFX.play(); tutWin(c.color === 'r' ? '✅ Mesma cor (vermelho)!' : '✅ Mesmo número (5)!'); }
+        else tutShake(e, '❌ Essa não combina. Procure vermelho ou 5.');
+      }));
+  } },
+  { t: 'Não tem carta? Compre!', task: true, render: (box) => {
+    const top = tc('g', '3');
+    box.append(h('p', { html: 'Se nada combina, clique em <b>🃏 Comprar</b>. Se a carta comprada servir, você pode jogar ela. Se não, <b>passa a vez</b>.' }),
+      tutTable(top),
+      tutHand([tc('r', '6'), tc('b', '8'), tc('y', 'rev')], (c, e) => tutShake(e, '❌ Nenhuma combina com o 3 verde. Compre!')),
+      h('p', { class: 'tut-task', text: '👉 Desafio: você não tem verde nem 3. Compre uma carta.' }),
+      h('button', { class: 'btn primary', text: '🃏 Comprar', onclick: (ev) => {
+        SFX.draw(); ev.target.disabled = true;
+        const got = tc('g', '9'); const hand = $('.tut-hand', box);
+        hand.append(tutCard(got, (c, e) => { e.classList.add('tut-played'); SFX.play(); tutWin('✅ Comprou um 9 verde e jogou! (Num jogo de verdade, o 9 ainda faz todo mundo bater na mesa 😄)'); }));
+        tutSay('Você comprou um 9 verde. Ele serve! Clique nele.');
+      } }));
+  } },
+  { t: 'Cartas especiais', render: (box) => {
+    const row = (c, txt) => h('div', { class: 'tut-spec' }, cardEl(c), h('div', { html: txt }));
+    box.append(h('div', { class: 'tut-specs' },
+      row(tc('b', 'skip'), '<b>Bloqueio</b> — o próximo jogador perde a vez.'),
+      row(tc('y', 'rev'), '<b>Inverter</b> — o sentido do jogo muda.'),
+      row(tc('r', 'd2'), '<b>+2</b> — o próximo compra 2 (dá pra acumular jogando outro +2).'),
+      row(tc('w', 'wild'), '<b>Coringa</b> — joga em cima de qualquer coisa e você escolhe a cor.'),
+      row(tc('w', 'w4'), '<b>+4</b> — escolhe a cor e o próximo compra 4.'),
+      row(tc('g', '9'), '<b>9</b> — todo mundo <b>bate na mesa</b>! Quem bater por último compra.'),
+      row(tc('b', '0'), '<b>0</b> — você pode trocar de mão com alguém (se quiser).'),
+      row(tc('r', '7'), '<b>7</b> — <b>silêncio</b>! Só quem está na vez pode jogar.')),
+      h('p', { class: 'muted', html: 'Levou +2 ou +4? Você compra e, <b>se tiver carta que serve</b>, ainda pode jogar. Se não, passa sozinho.' }));
+  } },
+  { t: 'Não pode bater com coringa', task: true, render: (box) => {
+    const top = tc('y', '4');
+    box.append(h('p', { html: 'Sua <b>última carta</b> não pode ser <b>Coringa</b> nem <b>+4</b>. Se sobrar só ela, você tem que comprar.' }),
+      tutTable(top),
+      tutHand([tc('w', 'w4')], (c, e) => tutShake(e, '❌ Não pode bater com +4! Compre uma carta.')),
+      h('p', { class: 'tut-task', text: '👉 Desafio: tente jogar o +4… depois faça o certo.' }),
+      h('button', { class: 'btn primary', text: '🃏 Comprar', onclick: (ev) => { SFX.draw(); ev.target.disabled = true; $('.tut-hand', box).append(tutCard(tc('y', '2'))); tutWin('✅ Isso! Comprou e continua no jogo.'); } }));
+  } },
+  { t: 'FAST HAND! ✋', task: true, render: (box) => {
+    const top = tc('b', '6');
+    box.append(h('p', { html: 'Quando você ficar com <b>1 carta</b>, aperte <b>✋ FAST HAND!</b> rapidinho. Todo mundo vê um aviso. Se esquecer e alguém jogar antes, você compra <b>2 de multa</b>.' }),
+      tutTable(top));
+    const btn = h('button', { class: 'btn fasthand-btn hidden', text: '✋ FAST HAND!' });
+    let bar = h('div', { class: 'tut-bar' }, h('i'));
+    box.append(h('p', { class: 'tut-task', text: '👉 Desafio: jogue o 6 vermelho e aperte FAST HAND! em até 3 segundos.' }),
+      tutHand([tc('r', '6'), tc('g', '1')], (c, e) => {
+        if (!legal(c, top)) return tutShake(e, '❌ Essa não combina com o 6 azul.');
+        e.classList.add('tut-played'); SFX.play(); btn.classList.remove('hidden'); bar.classList.add('run');
+        tutSay('Agora! Aperte FAST HAND!');
+        const fail = tLater(() => { btn.classList.add('hidden'); tutSay('😬 Demorou! Você comprou 2 de multa. Clique em "Tentar de novo".', true); SFX.penalty(); retry.classList.remove('hidden'); }, 3000);
+        btn.onclick = () => { clearTimeout(fail); btn.classList.add('hidden'); bar.classList.remove('run'); SFX.last(); tutWin('✅ FAST HAND! Todo mundo foi avisado que você tá com 1 carta.'); };
+      }), btn, bar);
+    const retry = h('button', { class: 'btn hidden', text: '🔁 Tentar de novo', onclick: () => renderTut() });
+    box.append(retry);
+  } },
+  { t: 'Cortar a vez ⚡', task: true, render: (box) => {
+    const top = tc('y', '4');
+    box.append(h('p', { html: 'Tem uma carta <b>IDÊNTICA</b> à da mesa (mesma cor e mesmo número)? Pode jogar <b>mesmo fora da sua vez</b>! Quem ia jogar fica <b>congelado</b> 🥶 e o jogo segue a partir de você.' }),
+      tutBot('Bot Zeca', 'é a vez dele…'), tutTable(top),
+      h('p', { class: 'tut-task', text: '👉 Desafio: corte o Bot Zeca antes dele jogar (4 segundos)!' }));
+    let over = false;
+    box.append(tutHand([tc('y', '7'), tc('y', '4'), tc('b', '4')], (c, e) => {
+      if (over) return;
+      if (c.color === 'y' && c.value === '4') { over = true; e.classList.add('tut-played'); SFX.jump(); $('.tut-bot', box).classList.add('is-frozen'); tutWin('⚡ CORTOU! O Bot Zeca ficou congelado.'); }
+      else tutShake(e, '❌ Pra cortar tem que ser IDÊNTICA: amarelo 4.');
+    }));
+    tLater(() => { if (!over) { over = true; tutSay('O Bot Zeca jogou antes. Clique em "Tentar de novo".', true); box.append(h('button', { class: 'btn', text: '🔁 Tentar de novo', onclick: () => renderTut() })); } }, 4000);
+  } },
+  { t: '9 = Bater na mesa! 🖐️', task: true, render: (box) => {
+    box.append(h('p', { html: 'Quando cair um <b>9</b>, todo mundo tem que <b>bater na mesa</b> (botão da mão ou tecla <b>espaço</b>). Quem bater por <b>último</b> compra cartas.' }),
+      h('p', { class: 'tut-task', text: '👉 Desafio: clique em "Começar" e, quando o 9 aparecer, bata o mais rápido que puder!' }));
+    const area = h('div', { class: 'tut-slap' });
+    const go = h('button', { class: 'btn primary', text: 'Começar' });
+    box.append(go, area);
+    go.onclick = () => {
+      go.disabled = true; area.innerHTML = ''; area.append(h('div', { class: 'muted', text: 'Fica atento…' }));
+      tLater(() => {
+        area.innerHTML = ''; area.append(cardEl(tc('g', '9')));
+        const t0 = performance.now(); SFX.slapStart();
+        const bots = [r(450, 900), r(500, 1100), r(600, 1300)];
+        const slap = h('button', { class: 'btn tut-slapbtn', text: '🖐️ BATER!' });
+        let done = false;
+        const hit = () => {
+          if (!area.isConnected) return document.removeEventListener('keydown', key);
+          if (done) return; done = true; const ms = Math.round(performance.now() - t0);
+          const slower = bots.filter(b => b > ms).length;
+          SFX.slap(1, 4, true);
+          if (slower > 0) tutWin(`✅ Bateu em ${ms} ms! Você não foi o último. 💪`);
+          else { tutSay(`😅 ${ms} ms… você foi o último e compraria cartas. Tente de novo!`, true); SFX.slapLose(); go.disabled = false; go.textContent = 'Tentar de novo'; }
+          document.removeEventListener('keydown', key);
+        };
+        const key = (e) => { if (e.code === 'Space') { e.preventDefault(); hit(); } };
+        document.addEventListener('keydown', key);
+        slap.onclick = hit; area.append(slap);
+        tLater(() => { if (!done) { done = true; document.removeEventListener('keydown', key); tutSay('😅 Você nem bateu! Tente de novo.', true); go.disabled = false; go.textContent = 'Tentar de novo'; } }, 2500);
+      }, r(1200, 2600));
+    };
+  } },
+  { t: '0 = Trocar a mão 🔀', render: (box) => {
+    box.append(h('p', { html: 'Jogou um <b>0</b>? Você escolhe uma opção:' }),
+      h('div', { class: 'tut-specs' },
+        h('div', { class: 'tut-spec' }, h('b', { text: '🔀' }), h('div', { html: '<b>Trocar com alguém</b> — boa quando alguém tem poucas cartas!' })),
+        h('div', { class: 'tut-spec' }, h('b', { text: '🙅' }), h('div', { html: '<b>Não trocar</b> — se sua mão já tá boa.' })),
+        h('div', { class: 'tut-spec' }, h('b', { text: '🔄' }), h('div', { html: '<b>Todos passam a mão</b> — cada um passa as cartas pro próximo, no sentido do jogo.' }))));
+  } },
+  { t: '7 = Silêncio 🤫', task: true, render: (box) => {
+    box.append(h('p', { html: 'Caiu um <b>7</b>? Silêncio total até o próximo jogar. <b>Só quem está na vez pode jogar.</b> Se alguém jogar fora da vez, clicar em carta errada ou mandar frase/meme, <b>"falou"</b> e compra <b>2 de multa</b>.' }),
+      tutBot('Bot Zeca', 'é a vez dele'), tutTable(tc('r', '7')),
+      h('p', { class: 'tut-task', text: '👉 Desafio: NÃO faça nada por 5 segundos. Nem cartas, nem frase!' }));
+    let over = false, broke = 0;
+    const brk = (e) => { if (over) return; broke++; tutShake(e || $('#tut-stage'), `🤫 Você quebrou o silêncio! +2 cartas (já foram ${broke * 2})`); SFX.penalty(); };
+    box.append(tutHand([tc('r', '3'), tc('y', '7'), tc('b', '1')], (c, e) => brk(e)),
+      h('button', { class: 'btn small', text: '💬 "Ih, rapaz!"', onclick: (ev) => brk(ev.target) }));
+    const cd = h('div', { class: 'tut-count', text: '5' }); box.append(cd);
+    let n = 5;
+    const iv = setInterval(() => { n--; cd.textContent = n; if (n <= 0) { clearInterval(iv); over = true; $('.tut-bot', box).querySelector('span').textContent = 'Bot Zeca jogou. Silêncio acabou!'; if (!broke) tutWin('✅ Ficou caladinho! Mandou bem.'); else { tutSay(`Ficou devendo ${broke * 2} cartas 😅. Dá pra tentar de novo.`, true); box.append(h('button', { class: 'btn', text: '🔁 Tentar de novo', onclick: () => renderTut() })); } } }, 1000);
+    tutTimers.push(iv);
+  } },
+  { t: 'O humor do seu boneco 😄😡🥶', render: (box) => {
+    box.append(h('p', { html: 'Durante o jogo o <b>seu próprio boneco</b> (o que você montou em Personalizar) muda de <b>cara</b> conforme o que acontece:' }));
+    const moods = [['happy', '😄 Feliz', 'jogou bem ou cortou alguém'], ['nervous', '😰 Nervoso', 'ficou com 1 carta'], ['frozen', '🥶 Congelado', 'foi cortado ou bloqueado'], ['sad', '😢 Triste', 'perdeu a vez'], ['angry', '😠 Bravo', 'comprou cartas'], ['furious', '⛈️ Furioso', 'comprou MUITAS cartas — vem tempestade com raio!'], ['party', '🥳 Festa', 'ganhou a rodada']];
+    box.append(h('div', { class: 'tut-moods' }, moods.map(([m, name, why]) => {
+      const d = h('div', { class: 'tut-mood' + (m === 'frozen' ? ' is-frozen' : '') });
+      const a = h('div', { class: 'avatar-svg' }); a.innerHTML = AV.svg(look, 60, { bust: true, mood: m });
+      d.append(a, h('b', { text: name }), h('small', { text: why })); return d;
+    })));
+  } },
+  { t: 'Pronto pra jogar! 🎉', render: (box) => {
+    box.append(h('p', { html: 'Resumão:' }),
+      h('ul', { class: 'tut-list', html: '<li>Combine <b>cor</b> ou <b>número</b>.</li><li>Nada serve? <b>Compre</b>.</li><li>1 carta? <b>FAST HAND!</b></li><li>Carta idêntica? <b>Corte</b> a vez!</li><li>9 → <b>bata na mesa</b>. 7 → <b>silêncio</b>. 0 → <b>troca</b> (se quiser).</li><li>Não pode <b>bater</b> com Coringa ou +4.</li>' }),
+      h('p', { class: 'muted', text: 'Dica: crie uma sala só com bots pra treinar sem pressão.' }),
+      h('div', { class: 'col gap' },
+        h('button', { class: 'btn primary big', text: '🤖 Treinar com bots', onclick: () => { store.set('tutSeen', 1); show('scr-play'); const b = $('[data-tabs="play"] [data-tab="create"]'); if (b) b.click(); } }),
+        h('button', { class: 'btn', text: '🏠 Voltar ao menu', onclick: () => { store.set('tutSeen', 1); show('scr-home'); } })));
+  } }
+];
+function renderTut() {
+  tutClear();
+  const st = TUT[tutStep], box = $('#tut-stage');
+  box.innerHTML = ''; box.classList.remove('shake');
+  box.append(h('h3', { text: st.t }));
+  st.render(box);
+  box.append(h('div', { id: 'tut-msg', class: 'tut-msg' }));
+  $('#tut-count').textContent = `${tutStep + 1} / ${TUT.length}`;
+  $('#tut-dots').innerHTML = '';
+  TUT.forEach((s, i) => $('#tut-dots').append(h('button', { class: 'dot' + (i === tutStep ? ' on' : '') + (tutDone[i] ? ' done' : ''), title: s.t, onclick: () => { tutStep = i; renderTut(); } })));
+  $('#tut-prev').disabled = tutStep === 0;
+  $('#tut-next').classList.remove('pulse');
+  $('#tut-next').textContent = tutStep === TUT.length - 1 ? '✔ Concluir' : (st.task ? 'Pular / Próximo →' : 'Próximo →');
+}
+$('#tut-prev').onclick = () => { if (tutStep > 0) { tutStep--; renderTut(); } };
+$('#tut-next').onclick = () => { if (tutStep < TUT.length - 1) { tutStep++; renderTut(); } else { store.set('tutSeen', 1); tutClear(); show('scr-home'); } };
+$('#btn-tut').onclick = () => { tutStep = 0; show('scr-tut'); };
+
 // ----------------------------- INÍCIO -----------------------------
 applyUI();
 refreshProfileBits();
-if (!store.get('name', '')) setTimeout(() => askName(), 300);
+if (!store.get('name', '')) setTimeout(() => askName(() => { if (!store.get('tutSeen', 0)) modal([h('h3', { text: '🎓 Primeira vez aqui?' }), h('p', { text: 'Quer um tutorial rapidinho (2 minutos) pra aprender as cartas e as regras?' }), h('div', { class: 'row gap' }, h('button', { class: 'btn primary big', text: 'Bora!', onclick: () => { closeModal(); tutStep = 0; show('scr-tut'); } }), h('button', { class: 'btn', text: 'Já sei jogar', onclick: () => { store.set('tutSeen', 1); closeModal(); } }))]); }), 300);
 })();
