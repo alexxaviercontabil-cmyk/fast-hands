@@ -77,6 +77,7 @@ const DEFAULT_RULES = {
   jumpIn: true,         // cortar a vez com carta idêntica
   stacking: true,       // acumular +2 / +4
   w4OnD2: true,         // pode jogar +4 em cima de +2
+  d2OnW4: true,         // depois do +4, um +2 DA COR ESCOLHIDA acumula (+4 +2 = 6)
   noWildFinish: true,   // não pode bater (terminar) com coringa ou +4
   penaltyPlay: true,    // depois de comprar o +2/+4 ainda joga se tiver carta (se não, passa sozinho)
   drawUntilPlay: false, // comprar até sair carta que serve
@@ -216,7 +217,7 @@ function canPlay(g, card, hand) {
   const t = top(g);
   if (g.pending > 0) {
     if (g.pendingType === 'd2') return card.value === 'd2' || (card.value === 'w4' && g.rules.w4OnD2);
-    if (g.pendingType === 'w4') return card.value === 'w4';
+    if (g.pendingType === 'w4') return card.value === 'w4' || (card.value === 'd2' && g.rules.d2OnW4 && card.color === g.color);
     return false;
   }
   if (card.color === 'w') return true;
