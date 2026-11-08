@@ -27,7 +27,7 @@ const store = {
 let PID = store.get('pid', null);
 if (!PID) { PID = 'p' + Math.random().toString(36).slice(2, 12); store.set('pid', PID); }
 const settings = Object.assign({
-  sound: true, music: true, musicVol: 45, sfxVol: 80, memeVol: 90, voiceVol: 100, tts: false, slapSounds: true, memes: true,
+  sound: true, music: true, musicVol: 45, sfxVol: 80, memeVol: 90, voiceVol: 100, tts: false, slapSounds: true, memes: true, voiceMode: 'auto', voiceGate: 50, antiNoise: 'forte', autoListen: true,
   vibrate: true, cardSize: 1, fontScale: 1, table: 'green', anim: true, shortcuts: true
 }, store.get('settings', {}));
 const saveSettings = () => { store.set('settings', settings); applyUI(); };
@@ -139,6 +139,7 @@ const SFX = {
 };
 // ----------------------------- MÚSICA (composta ao vivo, sem arquivos) -----------------------------
 // Dó maior: Cmaj7 - Am7 - Fmaj7 - G6. Os sons das cartas usam as mesmas notas, então tudo combina.
+const hush = { voice: false, rec: false };   // música abaixa na voz e some na gravação
 const music = (() => {
   const PROG = [[48, 52, 55, 59], [45, 48, 52, 55], [41, 45, 48, 52], [43, 47, 50, 52]];
   const MODES = {
@@ -147,7 +148,7 @@ const music = (() => {
     tense: { bpm: 118, kick: [0, 4, 8, 12], clap: [4, 12], hat: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15], bass: [0, 2, 4, 6, 8, 10, 12, 14], arp: [0, 2, 4, 6, 8, 10, 12, 14], arpOct: 24, padGain: 0.035 }
   };
   let mode = null, c = null, out = null, delay = null, timer = null, step = 0, nextTime = 0, duckUntil = 0;
-  const level = () => (settings.sound && settings.music ? settings.musicVol / 100 : 0) * (Date.now() < duckUntil ? 0.35 : 1);
+  const level = () => (settings.sound && settings.music ? settings.musicVol / 100 : 0) * (Date.now() < duckUntil ? 0.35 : 1) * (hush.rec ? 0 : hush.voice ? 0.3 : 1);
   function ensure() {
     c = audioCtx(); if (!c || out) return !!c;
     out = c.createGain(); out.gain.value = 0;
@@ -208,6 +209,69 @@ const music = (() => {
   };
 })();
 document.addEventListener('pointerdown', () => music.start());
+
+// ----------------------------- TRATAMENTO DE ÁUDIO DOS MEMES -----------------------------
+// Corta silêncio, tira chiado grave, comprime, normaliza e salva em WAV mono (toca liso em qualquer aparelho).
+function encodeWAV(samples, sr) {
+  const b = new ArrayBuffer(44 + samples.length * 2), v = new DataView(b);
+  const w = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + samples.length * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true);
+  v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) { const x = Math.max(-1, Math.min(1, samples[i])); v.setInt16(44 + i * 2, x < 0 ? x * 0x8000 : x * 0x7fff, true); }
+  return new Blob([b], { type: 'audio/wav' });
+}
+async function cleanAudio(blob, maxSec = 10) {
+  const c = audioCtx(); if (!c) throw new Error('sem áudio');
+  const buf = await new Promise((res, rej) => blob.arrayBuffer().then(ab => c.decodeAudioData(ab, res, rej)).catch(rej));
+  const n = buf.length, sr0 = buf.sampleRate, mono = new Float32Array(n);
+  for (let k = 0; k < buf.numberOfChannels; k++) { const d = buf.getChannelData(k); for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels; }
+  let mean = 0; for (let i = 0; i < n; i++) mean += mono[i]; mean /= n || 1;
+  let peak = 0; for (let i = 0; i < n; i++) { mono[i] -= mean; peak = Math.max(peak, Math.abs(mono[i])); }
+  if (peak < 0.004) throw new Error('mudo');
+  // corta o silêncio do começo e do fim (janelas de 10 ms)
+  const win = Math.floor(sr0 * 0.01), th = Math.max(0.008, peak * 0.05);
+  const loud = (i) => { let m = 0; for (let j = i; j < Math.min(n, i + win); j++) m = Math.max(m, Math.abs(mono[j])); return m > th; };
+  let a = 0; while (a < n && !loud(a)) a += win;
+  let z = n - win; while (z > a && !loud(z)) z -= win;
+  a = Math.max(0, a - Math.floor(sr0 * 0.04)); z = Math.min(n, z + win + Math.floor(sr0 * 0.15));
+  const cut = z - a > maxSec * sr0;
+  if (cut) z = a + maxSec * sr0;
+  const SR = 22050, len = Math.max(1, Math.ceil((z - a) / sr0 * SR));
+  const oc = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, len, SR);
+  const src = oc.createBuffer(1, z - a, sr0); src.getChannelData(0).set(mono.subarray(a, z));
+  const s = oc.createBufferSource(); s.buffer = src;
+  const hp = oc.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 85;
+  const comp = oc.createDynamicsCompressor(); comp.threshold.value = -26; comp.knee.value = 12; comp.ratio.value = 3.5; comp.attack.value = 0.004; comp.release.value = 0.2;
+  const pre = oc.createGain(); pre.gain.value = 0.9 / peak;   // sobe o volume antes do compressor
+  s.connect(hp).connect(pre).connect(comp).connect(oc.destination); s.start();
+  const out = (await oc.startRendering()).getChannelData(0);
+  let p2 = 0; for (let i = 0; i < out.length; i++) p2 = Math.max(p2, Math.abs(out[i]));
+  const g = p2 > 0 ? 0.92 / p2 : 1, fi = Math.floor(SR * 0.01), fo = Math.floor(SR * 0.05);
+  for (let i = 0; i < out.length; i++) { let k = g; if (i < fi) k *= i / fi; if (i > out.length - fo) k *= (out.length - i) / fo; out[i] *= k; }
+  return { blob: encodeWAV(out, SR), cut, secs: out.length / SR };
+}
+// toca sons de meme pelo motor de áudio (sem engasgo), guardando os já decodificados
+const clipCache = new Map();
+async function playClip(src, key) {
+  const vol = (settings.sound ? 1 : 0) * settings.memeVol / 100;
+  if (!vol) return;
+  const c = audioCtx();
+  try {
+    if (!c || c.state !== 'running') throw new Error('ctx');
+    let b = key && clipCache.get(key);
+    if (!b) {
+      const ab = src instanceof Blob ? await src.arrayBuffer() : await (await fetch(src)).arrayBuffer();
+      b = await new Promise((res, rej) => c.decodeAudioData(ab, res, rej));
+      if (key) { clipCache.set(key, b); if (clipCache.size > 40) clipCache.delete(clipCache.keys().next().value); }
+    }
+    const s = c.createBufferSource(), g = c.createGain(); g.gain.value = vol; s.buffer = b;
+    s.connect(g).connect(c.destination); s.start();
+    music.duck(b.duration * 1000 + 600);
+  } catch (e) {   // plano B: player comum
+    const a = new Audio(src instanceof Blob ? URL.createObjectURL(src) : src); a.volume = vol; a.play().catch(() => { });
+  }
+}
 music.set('menu');
 
 function buzz(ms) { if (settings.vibrate && navigator.vibrate) try { navigator.vibrate(ms); } catch (e) { } }
@@ -283,7 +347,7 @@ function applyUI() {
   document.documentElement.style.setProperty('--fontscale', settings.fontScale);
   document.body.dataset.table = settings.table;
   document.body.classList.toggle('noanim', !settings.anim);
-  $('#gm-sound').textContent = settings.sound ? '🔊' : '🔈';
+  $('#gm-sound').textContent = settings.sound ? '🎵' : '🔕';
   $$('#audios audio').forEach(a => a.volume = settings.voiceVol / 100);
 }
 let screenStack = [];
@@ -597,9 +661,17 @@ async function renderSounds(box) {
   const recBtn = h('button', { class: 'btn primary', text: '⏺ Gravar (até 10s)' });
   const file = h('input', { type: 'file', accept: 'audio/*', style: 'display:none' });
   const saveBlob = async (blob) => {
+    try {
+      const r = await cleanAudio(blob, 10);
+      blob = r.blob;
+      if (r.cut) toast('✂️ Cortei pra 10 segundos');
+    } catch (e) {
+      if (e.message === 'mudo') return shake('Não ouvi nada nessa gravação 🤔 Fala mais perto do microfone');
+      if (blob.size > 1000000) return shake('Áudio grande demais (máx ~1 MB)');
+      const d = await audioDuration(blob);
+      if (d > 10.5) return shake(`Esse áudio tem ${Math.round(d)}s. O máximo é 10 segundos ✂️`);
+    }
     if (blob.size > 1000000) return shake('Áudio grande demais (máx ~1 MB)');
-    const d = await audioDuration(blob);
-    if (d > 10.5) return shake(`Esse áudio tem ${Math.round(d)}s. O máximo é 10 segundos ✂️`);
     const label = lbl.value.trim() || `Som ${memesCache.length + 1}`;
     await memeDB.put({ id: 'm' + Date.now(), label, blob, on: eq < MAX_EQUIP });
     toast('Som salvo! 🎉'); renderSounds(box);
@@ -607,16 +679,21 @@ async function renderSounds(box) {
   recBtn.onclick = async () => {
     if (recorder) { recorder.stop(); return; }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioCtx(); hush.rec = true;   // música para enquanto grava (senão ela entra na gravação)
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: false, channelCount: 1 } }); }
+      catch (e) { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
       const chunks = [];
-      recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = e => chunks.push(e.data);
-      recorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); const rc = recorder; recorder = null; saveBlob(new Blob(chunks, { type: rc.mimeType || 'audio/webm' })); };
-      recorder.start();
+      const mt = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+      recorder = new MediaRecorder(stream, mt ? { mimeType: mt, audioBitsPerSecond: 96000 } : undefined);
+      recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => { stream.getTracks().forEach(t => t.stop()); hush.rec = false; const rc = recorder; recorder = null; recBtn.classList.remove('rec'); recBtn.textContent = '⏳ Ajustando o som…'; saveBlob(new Blob(chunks, { type: rc.mimeType || 'audio/webm' })); };
+      await new Promise(r => setTimeout(r, 150));   // microfone "acorda" antes de gravar
+      recorder.start(250);
       recBtn.classList.add('rec'); let left = 10; recBtn.textContent = `⏹ Parar (${left}s)`;
       const iv = setInterval(() => { left--; if (recorder) recBtn.textContent = `⏹ Parar (${left}s)`; else clearInterval(iv); }, 1000);
       setTimeout(() => { clearInterval(iv); if (recorder && recorder.state === 'recording') recorder.stop(); }, 10000);
-    } catch (e) { shake('Não consegui usar o microfone (permita no navegador)'); }
+    } catch (e) { hush.rec = false; recorder = null; shake('Não consegui usar o microfone (permita no navegador)'); }
   };
   file.onchange = () => { if (file.files[0]) saveBlob(file.files[0]); };
   box.append(h('b', { text: `🔊 Meus sons (${eq}/${MAX_EQUIP} na partida)` }),
@@ -627,7 +704,7 @@ async function renderSounds(box) {
     const c = h('input', { type: 'checkbox' }); c.checked = !!m.on;
     c.onchange = async () => { if (c.checked && memesCache.filter(x => x.on).length >= MAX_EQUIP) { c.checked = false; return shake(`Máximo ${MAX_EQUIP} na partida`); } m.on = c.checked; await memeDB.put(m); renderSounds(box); };
     return h('div', { class: 'lib-item' }, c, h('span', { class: 't', text: m.label }),
-      h('button', { class: 'btn small', text: '▶', onclick: () => { const a = new Audio(URL.createObjectURL(m.blob)); a.volume = settings.memeVol / 100; a.play(); } }),
+      h('button', { class: 'btn small', text: '▶', onclick: () => playClip(m.blob, 'mine:' + m.id + ':' + m.blob.size) }),
       h('button', { class: 'btn small ghost', text: '🗑', onclick: async () => { await memeDB.del(m.id); renderSounds(box); } }));
   })));
 }
@@ -674,7 +751,7 @@ function renderSettings() {
     h('div', { class: 'muted tiny', text: 'Seus itens e moedinhas ficam salvos neste aparelho/navegador.' }));
   // sons
   const So = $('#st-sound'); So.innerHTML = '';
-  So.append(chk('sound', '🔊 Som ligado (tudo)'), chk('music', '🎵 Música de fundo'), slider('musicVol', 'Música'), slider('sfxVol', 'Efeitos'), slider('memeVol', 'Sons/memes dos outros'), slider('voiceVol', 'Voz das pessoas'),
+  So.append(chk('sound', '🔊 Som ligado (tudo)'), chk('music', '🎵 Música de fundo'), slider('musicVol', 'Música'), slider('sfxVol', 'Efeitos'), slider('memeVol', 'Sons/memes dos outros'), slider('voiceVol', 'Voz das pessoas'), chk('autoListen', '🔊 Já entrar na sala ouvindo a voz (microfone começa desligado)'),
     chk('memes', '😂 Tocar os sons/memes dos outros'), chk('slapSounds', '✋ Sons variados de batida na mesa'), chk('tts', '🗣️ Ler as frases em voz alta'));
   // interface
   const U = $('#st-ui'); U.innerHTML = '';
@@ -725,7 +802,7 @@ $('#lb-copy').onclick = () => {
 $('#lb-max').oninput = () => { $('#lb-max-v').textContent = $('#lb-max').value; };
 $('#lb-max').onchange = () => socket.emit('room:settings', { maxPlayers: Number($('#lb-max').value) });
 $('#lb-preset').onchange = () => { const v = $('#lb-preset').value; if (v) socket.emit('room:settings', { rules: presetRules(v) }); };
-function leaveRoom() { specMode = null; voice.leave(); voiceSeen.clear(); socket.emit('room:leave'); S = null; closeModal(); show('scr-play'); }
+function leaveRoom() { specMode = null; voice.leave(); leftVoiceByHand = false; voiceSeen.clear(); socket.emit('room:leave'); S = null; closeModal(); show('scr-play'); }
 
 function renderLobby() {
   if (currentScreen !== 'scr-lobby') { $$('.screen').forEach(s => s.classList.toggle('hidden', s.id !== 'scr-lobby')); currentScreen = 'scr-lobby'; }
@@ -861,6 +938,7 @@ function renderGame() {
   }
   $('#draw-count').textContent = g.drawCount;
   $('#color-dot').style.background = COLORS_HEX[g.color] || '#fff';
+  $('#discard').style.setProperty('--cur', COLORS_HEX[g.color] || '#fff');
   $('#dir').className = 'dir' + (g.dir < 0 ? ' ccw' : '');
   $('#pending').classList.toggle('hidden', !g.pending);
   $('#pending').textContent = `+${g.pending}`;
@@ -870,7 +948,7 @@ function renderGame() {
   const st = $('#status');
   if (g.phase === 'over') st.textContent = `🏆 ${nameOf(g.winner)} venceu!`;
   else if (g.phase === 'slap') st.textContent = '✋ BATE NA MESA!';
-  else if (myTurn) st.textContent = g.pending ? `SUA VEZ! Acumule ou compre +${g.pending}` : (g.penaltyDrawn ? 'Comprou! Ainda pode jogar ou passar' : (g.hasDrawn ? 'Jogue a carta comprada ou passe' : 'SUA VEZ!'));
+  else if (myTurn) st.textContent = g.pending ? `SUA VEZ · acumule ou compre +${g.pending}` : (g.penaltyDrawn ? 'SUA VEZ · jogue ou passe' : (g.hasDrawn ? 'SUA VEZ · jogue a comprada ou passe' : 'SUA VEZ!'));
   else { st.textContent = ''; st.append(avatarOf(g.turn, 26, true), h('span', { text: `Vez de ${nameOf(g.turn)}` })); }
   st.classList.toggle('me', myTurn);
   st.classList.toggle('other', !myTurn && g.phase === 'play');
@@ -885,7 +963,7 @@ function renderGame() {
     const ang = Math.atan2(ty - cy, tx - cx) * 180 / Math.PI;
     arrow.style.left = cx + 'px'; arrow.style.top = cy + 'px';
     arrow.style.transform = `translate(-50%,-50%) rotate(${ang}deg)`;
-    arrow.classList.remove('hidden'); arrow.classList.toggle('mine', myTurn);
+    arrow.classList.add('hidden');   // a vez agora aparece no anel do boneco e no painel do canto
   } else arrow.classList.add('hidden');
   $('.bottom').classList.toggle('myturn', myTurn);
 
@@ -1165,7 +1243,12 @@ function openQuickEditor() {
   modal([h('h3', { text: '💬 Frases & 🔊 Sons' }), a, b, h('button', { class: 'btn primary big', text: 'Pronto', onclick: () => { closeModal(); renderQuickbar(); } })], 'lib');
 }
 function blobToDataURL(bl) { return new Promise(res => { const f = new FileReader(); f.onload = () => res(f.result); f.readAsDataURL(bl); }); }
-async function sendMeme(m) { socket.emit('meme', { label: m.label, audio: await blobToDataURL(m.blob) }); }
+async function sendMeme(m) {
+  if (m.blob && m.blob.type !== 'audio/wav') {   // sons antigos: ajusta uma vez e guarda já limpo
+    try { m.blob = (await cleanAudio(m.blob, 10)).blob; await memeDB.put(m); } catch (e) { }
+  }
+  socket.emit('meme', { label: m.label, audio: await blobToDataURL(m.blob) });
+}
 function showBubble(from, text, isMeme) {
   const seat = $(`.seat[data-id="${from}"]`);
   if (!seat) { toast(`${nameOf(from)}: ${text}`); return; }
@@ -1180,23 +1263,76 @@ socket.on('phrase', ({ from, text }) => {
 });
 socket.on('meme', ({ from, label, audio }) => {
   if (from === PID) toast(`🔊 ${label}`); else showBubble(from, '🔊 ' + label, true);
-  if (settings.memes) { music.duck(4000); const a = new Audio(audio); a.volume = settings.memeVol / 100; a.play().catch(() => { }); }
+  if (settings.memes) playClip(audio, from + ':' + label + ':' + audio.length);
 });
 
 // ----------------------------- VOZ (WebRTC) -----------------------------
 let ICE_CFG = { iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }] };
 let HAS_TURN = false;
 const speaking = {};   // quem está falando agora (pra acender o boneco)
+// deixa o Opus (codec da voz) mais resistente a internet ruim e sem estéreo desnecessário
+function tuneOpus(sdp) {
+  const m = sdp.match(/a=rtpmap:(\d+) opus\/48000[^\r\n]*/i); if (!m) return sdp;
+  const pt = m[1], re = new RegExp('a=fmtp:' + pt + ' ([^\\r\\n]*)');
+  const extra = { useinbandfec: 1, usedtx: 1, stereo: 0, 'sprop-stereo': 0, maxaveragebitrate: 32000, maxplaybackrate: 48000 };
+  if (re.test(sdp)) return sdp.replace(re, (all, params) => {
+    const kv = Object.fromEntries(params.split(';').filter(Boolean).map(x => x.trim().split('=')));
+    Object.assign(kv, extra);
+    return 'a=fmtp:' + pt + ' ' + Object.entries(kv).map(([k, v]) => k + '=' + v).join(';');
+  });
+  return sdp.replace(m[0], m[0] + '\r\na=fmtp:' + pt + ' ' + Object.entries(extra).map(([k, v]) => k + '=' + v).join(';'));
+}
+const withOpus = (d) => ({ type: d.type, sdp: tuneOpus(d.sdp) });
+let pttDown = false;
+const ICON = {
+  mic: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>',
+  micOff: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z" opacity=".55"/><line x1="4" y1="3" x2="20" y2="21" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>',
+  spk: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3z"/><path d="M15.5 8.5a4.5 4.5 0 0 1 0 7M18 6a8 8 0 0 1 0 12" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>',
+  spkOff: '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3z" opacity=".55"/><path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>'
+};
+const NOISE = {   // anti-ruído: filtros e o quanto a voz precisa ficar acima do barulho do ambiente
+  forte: { hp: 150, lp: 5600, margin: 13, ns: true },
+  normal: { hp: 100, lp: 7200, margin: 8, ns: true },
+  off: { hp: 60, lp: 12000, margin: 0, ns: false }
+};
+let leftVoiceByHand = false;   // se a pessoa saiu da voz de propósito, não entra sozinho de novo
 const voice = (() => {
-  let on = false, muted = false, stream = null, myLevel = 0;
+  let on = false, muted = true, stream = null, myLevel = 0;
+  let raw = null, chain = null, deaf = false;   // raw = microfone cru; stream = som tratado que vai pros outros
   const peers = {};    // id -> { pc, state, ice: [], initiator, tries }
   const meters = {};   // id -> analyser
   const ST = { connecting: '🟡 conectando…', connected: '🟢 conectado', failed: '🔴 não conectou', closed: '⚪ saiu' };
+  const micLive = () => !!stream && (settings.voiceMode === 'ptt' ? pttDown : !muted);
   function updateButtons() {
-    $$('.voice-btn').forEach(b => { b.classList.toggle('on', on); b.textContent = b.closest('.topbar') ? '🎧' : (on ? '🎧 Na voz' : '🎧 Entrar na voz'); b.title = on ? 'Opções de voz' : 'Entrar na voz'; });
-    $('#gm-mic').classList.toggle('hidden', !on || !stream);
-    $('#gm-mic').textContent = muted ? '🔇' : '🎤';
+    const others = S ? S.members.filter(m => m.voiceOn && m.id !== PID && !m.isBot).length : 0;
+    $$('.voice-btn').forEach(b => {
+      b.classList.toggle('on', on);
+      b.classList.toggle('invite', !on && others > 0);
+      b.classList.toggle('icon-only', on);
+      b.textContent = on ? '🎧' : (others ? `🎧 Entrar na voz (${others})` : '🎧 Entrar na voz');
+      b.title = on ? 'Opções da voz (anti-ruído, modo do microfone, sair)' : 'Entrar na conversa por voz';
+    });
+    $$('.mic-btn').forEach(b => b.classList.toggle('hidden', !on));
+    $$('.hear-btn').forEach(b => {
+      b.classList.toggle('hidden', !on);
+      b.innerHTML = deaf ? ICON.spkOff : ICON.spk;
+      b.classList.toggle('off', deaf); b.classList.toggle('ok', !deaf);
+      b.title = deaf ? 'Áudio da voz DESLIGADO — toque pra ouvir a galera' : 'Áudio da voz LIGADO — toque pra silenciar';
+    });
+    hush.voice = micLive();
+    updateMicBtn();
     if ($('#modal').dataset.kind === 'voice') panel();
+  }
+  function updateMicBtn() {
+    const ptt = settings.voiceMode === 'ptt';
+    const live = micLive(), talking = !!(chain && chain.open && live);
+    $$('.mic-btn').forEach(b => {
+      b.innerHTML = live ? ICON.mic : ICON.micOff;
+      b.classList.toggle('talking', talking);
+      b.classList.toggle('off', !live); b.classList.toggle('ok', live && !talking);
+      b.title = ptt ? 'Segure pra falar (ou segure a tecla V)' : live ? 'Microfone LIGADO — toque pra desligar' : 'Microfone DESLIGADO — toque pra falar';
+    });
+    hush.voice = live;
   }
   function meter(id, ms) {
     const c = audioCtx(); if (!c) return;
@@ -1205,13 +1341,13 @@ const voice = (() => {
   function attach(id, ms) {
     let a = $(`#aud-${id}`);
     if (!a) { a = h('audio', { id: 'aud-' + id, autoplay: '', playsinline: '' }); $('#audios').append(a); }
-    a.srcObject = ms; a.volume = settings.voiceVol / 100;
+    a.srcObject = ms; a.volume = settings.voiceVol / 100; a.muted = deaf;
     a.play().catch(() => showTap());
     meter(id, ms);
   }
   function showTap() {   // celular às vezes bloqueia o som até a pessoa tocar na tela
     if ($('#tap-audio')) return;
-    const b = h('button', { id: 'tap-audio', class: 'btn primary tap-audio', text: '🔈 Toque aqui pra ouvir a voz', onclick: () => { $$('#audios audio').forEach(a => a.play().catch(() => { })); audioCtx(); b.remove(); } });
+    const b = h('button', { id: 'tap-audio', class: 'btn primary tap-audio', text: '🔊 Toque aqui pra ouvir a voz da galera', onclick: () => { $$('#audios audio').forEach(a => a.play().catch(() => { })); audioCtx(); b.remove(); } });
     document.body.append(b);
   }
   function setState(id, st) { if (peers[id]) peers[id].state = st; if ($('#modal').dataset.kind === 'voice') panel(); }
@@ -1228,11 +1364,10 @@ const voice = (() => {
       if (cs === 'connected') setState(id, 'connected');
       else if (cs === 'failed') {
         setState(id, 'failed');
-        // tenta de novo (até 2 vezes)
         if (P.tries < 2) setTimeout(() => { if (!on || peers[id] !== P) return; if (P.initiator) { drop(id); create(id, true, P.tries + 1); } else socket.emit('rtc', { to: id, data: { retry: true } }); }, 1500);
       }
     };
-    if (initiator) pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => socket.emit('rtc', { to: id, data: { sdp: pc.localDescription } })).catch(e => console.warn('voz', e));
+    if (initiator) pc.createOffer().then(o => pc.setLocalDescription(withOpus(o))).then(() => socket.emit('rtc', { to: id, data: { sdp: pc.localDescription } })).catch(e => console.warn('voz', e));
     return P;
   }
   function drop(id) {
@@ -1240,9 +1375,20 @@ const voice = (() => {
     const a = $(`#aud-${id}`); if (a) a.remove();
     delete meters[id]; delete speaking[id];
   }
+  // quando o microfone é ligado pela 1ª vez, refaz as conexões pra mandar a voz junto
+  function renewAll() {
+    for (const id of Object.keys(peers)) {
+      if (PID < id) { drop(id); create(id, true); }
+      else socket.emit('rtc', { to: id, data: { retry: true, renew: true } });
+    }
+  }
   socket.on('rtc', async ({ from, data }) => {
     if (!on) return;
-    if (data.retry) { const P = peers[from]; if (P && P.initiator && P.tries < 3) { const t = P.tries; drop(from); create(from, true, t + 1); } return; }
+    if (data.retry) {
+      const P = peers[from];
+      if (PID < from && (!P || P.initiator) && (data.renew || !P || P.tries < 3)) { const t = P ? P.tries : 0; drop(from); create(from, true, data.renew ? 0 : t + 1); }
+      return;
+    }
     let P = peers[from];
     if (data.sdp && data.sdp.type === 'offer') { const t = P ? P.tries : 0; if (P) drop(from); P = create(from, false, t); }
     if (!P) { if (data.ice) return; P = create(from, false); }
@@ -1250,8 +1396,8 @@ const voice = (() => {
     try {
       if (data.sdp) {
         await pc.setRemoteDescription(data.sdp);
-        for (const c of P.ice.splice(0)) await pc.addIceCandidate(c).catch(() => { });   // candidatos que chegaram cedo
-        if (data.sdp.type === 'offer') { await pc.setLocalDescription(await pc.createAnswer()); socket.emit('rtc', { to: from, data: { sdp: pc.localDescription } }); }
+        for (const c of P.ice.splice(0)) await pc.addIceCandidate(c).catch(() => { });
+        if (data.sdp.type === 'offer') { await pc.setLocalDescription(withOpus(await pc.createAnswer())); socket.emit('rtc', { to: from, data: { sdp: pc.localDescription } }); }
       } else if (data.ice) {
         if (pc.remoteDescription) await pc.addIceCandidate(data.ice); else P.ice.push(data.ice);
       }
@@ -1264,46 +1410,147 @@ const voice = (() => {
       const talk = lvl(an) > 10;
       if (talk !== !!speaking[id]) { speaking[id] = talk; const s = $(`.seat[data-id="${id}"]`); if (s) s.classList.toggle('speaking', talk); }
     }
-    if (meters.__me) { myLevel = muted ? 0 : lvl(meters.__me); const bar = $('#mic-meter div'); if (bar) bar.style.width = Math.min(100, myLevel * 2.2) + '%'; }
+    if (meters.__me) { myLevel = micLive() ? lvl(meters.__me) : 0; const bar = $('#mic-meter div'); if (bar) bar.style.width = Math.min(100, myLevel * 2.2) + '%'; }
   }, 120);
+  // Cadeia do microfone (anti-ruído):
+  //  1) filtros cortam ronco grave e chiado agudo   2) compressor deixa a voz uniforme
+  //  3) o jogo mede o barulho do ambiente sozinho e só deixa passar o que fica bem acima dele
+  //  4) enquanto outra pessoa fala, fica mais exigente (corta o eco do alto-falante)
+  function buildChain(rawStream) {
+    const c = audioCtx(); if (!c) return null;
+    try {
+      const src = c.createMediaStreamSource(rawStream);
+      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.Q.value = 0.8;
+      const hp2 = c.createBiquadFilter(); hp2.type = 'highpass'; hp2.Q.value = 0.6;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass';
+      const comp = c.createDynamicsCompressor(); comp.threshold.value = -28; comp.knee.value = 18; comp.ratio.value = 3; comp.attack.value = 0.005; comp.release.value = 0.25;
+      const makeup = c.createGain(); makeup.gain.value = 1.4;
+      const an = c.createAnalyser(); an.fftSize = 1024;
+      const gate = c.createGain(); gate.gain.value = 0;
+      const dest = c.createMediaStreamDestination();
+      src.connect(hp).connect(hp2).connect(lp); lp.connect(an); lp.connect(comp).connect(makeup).connect(gate).connect(dest);
+      const data = new Float32Array(an.fftSize);
+      const ch = { c, src, gate, dest, hp, hp2, lp, db: -100, floor: -60, open: false, openUntil: 0 };
+      ch.apply = () => { const N = NOISE[settings.antiNoise] || NOISE.normal; hp.frequency.value = N.hp; hp2.frequency.value = N.hp; lp.frequency.value = N.lp; };
+      ch.apply();
+      ch.iv = setInterval(() => {
+        an.getFloatTimeDomainData(data);
+        let sum = 0; for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const db = 20 * Math.log10(Math.sqrt(sum / data.length) + 1e-9); ch.db = db;
+        // nível do barulho de fundo: desce rápido, sobe devagar (ventilador, ar-condicionado, rua…)
+        if (db < ch.floor) ch.floor += (db - ch.floor) * 0.25; else ch.floor += 0.025;
+        ch.floor = Math.max(-90, Math.min(-25, ch.floor));
+        const N = NOISE[settings.antiNoise] || NOISE.normal;
+        const mode = settings.voiceMode, now = Date.now();
+        let want;
+        if (!micLive()) want = 0;
+        else if (mode === 'open' || mode === 'ptt') want = (N.margin && db < ch.floor + N.margin * 0.6) ? (now < ch.openUntil ? 1 : 0) : 1;
+        else {
+          const othersTalking = Object.entries(speaking).some(([id, v]) => v && id !== '__me');
+          const th = Math.max(-22 - settings.voiceGate * 0.38, ch.floor + N.margin) + (othersTalking ? 9 : 0);
+          if (db > th) ch.openUntil = now + 380;
+          want = now < ch.openUntil ? 1 : 0;
+        }
+        if ((mode === 'open' || mode === 'ptt') && want && db > ch.floor + N.margin * 0.6) ch.openUntil = now + 300;
+        if (!!want !== ch.open) { ch.open = !!want; gate.gain.setTargetAtTime(want ? 1 : 0, c.currentTime, want ? 0.012 : 0.07); updateMicBtn(); }
+      }, 25);
+      return ch;
+    } catch (e) { console.warn('cadeia de voz', e); return null; }
+  }
+  async function getMic() {
+    audioCtx();
+    const N = NOISE[settings.antiNoise] || NOISE.normal;
+    raw = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: { ideal: true }, noiseSuppression: { ideal: N.ns }, autoGainControl: { ideal: true }, channelCount: { ideal: 1 }, sampleRate: { ideal: 48000 } } });
+    chain = buildChain(raw);
+    stream = chain ? chain.dest.stream : raw;
+    meter('__me', stream);
+  }
+  function setAntiNoise(v) {
+    settings.antiNoise = v; saveSettings();
+    if (chain) chain.apply();
+    if (raw) raw.getAudioTracks().forEach(t => t.applyConstraints && t.applyConstraints({ noiseSuppression: NOISE[v].ns, echoCancellation: true, autoGainControl: true }).catch(() => { }));
+    panel();
+  }
   function panel() {
     const list = S ? S.members.filter(m => m.voiceOn && m.id !== PID && !m.isBot) : [];
+    const live = micLive();
     modal([h('h3', { text: '🎧 Voz' }),
-      stream ? h('div', {}, h('div', { class: 'muted tiny', text: 'Seu microfone (fale pra ver a barrinha mexer):' }), h('div', { id: 'mic-meter', class: 'mic-meter' }, h('div'))) : h('div', { class: 'toast bad', text: 'Sem microfone: você só escuta.' }),
+      h('div', { class: 'vc-big' },
+        h('button', { class: 'btn big ' + (live ? 'on' : 'danger'), html: (live ? ICON.mic + ' Meu microfone: LIGADO' : ICON.micOff + ' Meu microfone: DESLIGADO (toque pra falar)'), onclick: () => voice.mic() }),
+        h('button', { class: 'btn big ' + (deaf ? 'danger' : 'on'), html: (deaf ? ICON.spkOff + ' Áudio da voz: DESLIGADO (toque pra ouvir)' : ICON.spk + ' Áudio da voz: LIGADO'), onclick: () => voice.deafen() })),
+      stream ? h('div', {}, h('div', { class: 'muted tiny', text: 'Seu microfone (fale pra ver a barrinha mexer):' }), h('div', { id: 'mic-meter', class: 'mic-meter' }, h('div'))) : null,
+      h('div', { class: 'voice-opts' },
+        h('div', { class: 'opt-title', text: '🧹 Anti-ruído' }),
+        h('div', { class: 'seg' }, [['forte', '💪 Forte'], ['normal', '👌 Normal'], ['off', '🚫 Desligado']].map(([v, t]) =>
+          h('button', { class: 'btn small' + (settings.antiNoise === v ? ' on' : ''), text: t, onclick: () => setAntiNoise(v) }))),
+        h('div', { class: 'muted tiny', text: settings.antiNoise === 'forte' ? 'Corta ventilador, teclado, rua e eco. A voz fica um pouco mais "de rádio".' : settings.antiNoise === 'normal' ? 'Equilíbrio entre limpar o barulho e manter a voz natural.' : 'Som cru do microfone (só use com microfone bom e lugar silencioso).' }),
+        h('div', { class: 'opt-title', text: 'Como o microfone abre' }),
+        h('div', { class: 'seg' }, [['auto', '🤖 Automático'], ['ptt', '🎙️ Segurar pra falar'], ['open', '🔓 Sempre aberto']].map(([v, t]) =>
+          h('button', { class: 'btn small' + (settings.voiceMode === v ? ' on' : ''), text: t, onclick: () => { settings.voiceMode = v; saveSettings(); if (v === 'ptt' && !stream) voice.mic(true); updateButtons(); } }))),
+        settings.voiceMode === 'auto' ? h('label', { class: 'muted tiny' }, 'Sensibilidade (abaixe se estiver pegando barulho): ',
+          h('input', { type: 'range', min: 0, max: 100, value: settings.voiceGate, oninput: (e) => { settings.voiceGate = +e.target.value; saveSettings(); } })) : null,
+        settings.voiceMode === 'ptt' ? h('div', { class: 'muted tiny', text: 'Segure o botão do microfone (ou a tecla V) enquanto fala.' }) : null,
+        h('div', { class: 'muted tiny', text: '🎧 Dica de ouro: com fone de ouvido o eco some de vez. Se duas pessoas estiverem no mesmo lugar (ex.: celular e PC lado a lado), um aparelho capta o outro e vira microfonia.' })),
       h('div', { class: 'opt-title', text: 'Quem está na voz' }),
-      list.length ? h('div', { class: 'members' }, list.map(m => h('div', { class: 'member' }, avatarOf(m.id, 30, true), h('span', { class: 'nm', text: m.name + (m.muted ? ' 🔇' : '') }),
-        h('span', { class: 'tiny', text: peers[m.id] ? ST[peers[m.id].state] : '🟡 conectando…' })))) : h('div', { class: 'muted', text: 'Ninguém mais entrou na voz ainda. Os outros também precisam clicar em 🎧!' }),
+      list.length ? h('div', { class: 'members' }, list.map(m => h('div', { class: 'member' }, avatarOf(m.id, 30, true), h('span', { class: 'nm', text: m.name + (m.muted ? ' 🔇' : ' 🎤') }),
+        h('span', { class: 'tiny', text: peers[m.id] ? ST[peers[m.id].state] : '🟡 conectando…' })))) : h('div', { class: 'muted', text: 'Ninguém mais na voz ainda.' }),
       !HAS_TURN ? h('div', { class: 'muted tiny', text: '⚠️ Se aparecer "🔴 não conectou" entre celular no 4G e PC no Wi-Fi, a rede está bloqueando a conexão direta. Aí é preciso ligar o servidor TURN (veja o LEIA-ME).' }) : null,
       h('div', { class: 'row gap' },
-        stream ? h('button', { class: 'btn', text: muted ? '🎤 Ligar microfone' : '🔇 Mutar', onclick: () => voice.mute() }) : null,
-        h('button', { class: 'btn danger', text: 'Sair da voz', onclick: () => { closeModal(); voice.leave(); } }),
+        h('button', { class: 'btn danger', text: 'Sair da voz', onclick: () => { closeModal(); leftVoiceByHand = true; voice.leave(); } }),
         h('button', { class: 'btn primary big', text: 'Fechar', onclick: closeModal }))], 'voice');
   }
   return {
     get on() { return on; },
-    async click() { if (on) panel(); else this.join(); },
-    async join() {
+    async click() { if (on) panel(); else { leftVoiceByHand = false; this.join(); } },
+    // entra na voz OUVINDO (microfone começa desligado)
+    join(quiet) {
+      if (on) return;
       audioCtx();
-      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); meter('__me', stream); }
-      catch (e) { stream = null; toast(location.protocol === 'https:' || location.hostname === 'localhost' ? 'Sem permissão de microfone: você vai só ouvir 🎧' : 'Microfone só funciona em link https', true); }
-      on = true; muted = false;
-      socket.emit('voice', { on: true, muted: !stream });
-      updateButtons(); toast('Você entrou na voz 🎙️');
+      on = true; muted = true; deaf = false;
+      socket.emit('voice', { on: true, muted: true });
+      updateButtons();
+      if (!quiet) toast('🔊 Você está ouvindo a galera. Toque no microfone lá em cima pra falar');
       this.sync();
     },
+    // liga/desliga o microfone (na 1ª vez pede permissão)
+    async mic(forceOn) {
+      if (!on) this.join(true);
+      if (!stream) {
+        try { await getMic(); }
+        catch (e) { stream = null; raw = null; toast(location.protocol === 'https:' || location.hostname === 'localhost' ? 'Não deu pra usar o microfone (permita no navegador)' : 'Microfone só funciona em link https', true); updateButtons(); return; }
+        muted = false; renewAll();
+      } else muted = forceOn ? false : !muted;
+      if (raw && settings.voiceMode !== 'ptt') raw.getAudioTracks().forEach(t => t.enabled = !muted);
+      socket.emit('voice', { muted: settings.voiceMode === 'ptt' ? false : muted });
+      updateButtons();
+      if (settings.voiceMode !== 'ptt') toast(muted ? '🔇 Microfone desligado' : '🎤 Microfone ligado — a galera te ouve');
+    },
+    mute() { this.mic(); },
     leave() {
       if (!on) return;
-      on = false; Object.keys(peers).forEach(drop); delete meters.__me;
-      if (stream) stream.getTracks().forEach(t => t.stop()); stream = null;
+      on = false; muted = true; hush.voice = false; Object.keys(peers).forEach(drop); delete meters.__me;
+      if (chain) { clearInterval(chain.iv); try { chain.src.disconnect(); } catch (e) { } chain = null; }
+      if (raw) raw.getTracks().forEach(t => t.stop());
+      if (stream) stream.getTracks().forEach(t => t.stop()); stream = null; raw = null;
       socket.emit('voice', { on: false }); updateButtons();
     },
-    mute() { if (!stream) return; muted = !muted; stream.getAudioTracks().forEach(t => t.enabled = !muted); socket.emit('voice', { muted }); updateButtons(); },
+    async ptt(down) {
+      if (pttDown === down) return;
+      if (down && !stream) { await this.mic(true); }
+      pttDown = down;
+      if (raw && settings.voiceMode === 'ptt') raw.getAudioTracks().forEach(t => t.enabled = down);
+      updateMicBtn();
+    },
+    deafen() { deaf = !deaf; $$('#audios audio').forEach(a => { a.muted = deaf; if (!deaf) a.play().catch(() => { }); }); audioCtx(); updateButtons(); toast(deaf ? '🔇 Áudio da voz desligado' : '🔊 Ouvindo a galera'); },
+    refresh() { updateButtons(); },
     sync() {
       if (!S) return;
+      // por padrão você já entra ouvindo (microfone desligado)
+      if (!on && settings.autoListen && !leftVoiceByHand) { this.join(true); return; }
       const want = S.members.filter(m => m.voiceOn && !m.isBot && m.connected && m.id !== PID).map(m => m.id);
-      // avisa quem não está na voz que alguém entrou
-      want.forEach(id => { if (!voiceSeen.has(id)) { voiceSeen.add(id); if (!on) toast(`🎙️ ${nameOf(id)} entrou na voz. Clique em 🎧 pra conversar!`); } });
+      want.forEach(id => { if (!voiceSeen.has(id)) { voiceSeen.add(id); if (!on) toast(`🎙️ ${nameOf(id)} entrou na voz. Toque em "🎧 Entrar na voz" lá em cima!`); } });
       [...voiceSeen].forEach(id => { if (!want.includes(id)) voiceSeen.delete(id); });
+      updateButtons();
       if (!on) return;
       want.forEach(id => { if (!peers[id] && PID < id) create(id, true); });
       Object.keys(peers).forEach(id => { if (!want.includes(id)) drop(id); });
@@ -1312,7 +1559,17 @@ const voice = (() => {
 })();
 const voiceSeen = new Set();
 $$('.voice-btn').forEach(b => b.onclick = () => voice.click());
-$('#gm-mic').onclick = () => voice.mute();
+$$('.hear-btn').forEach(b => b.onclick = () => voice.deafen());
+$$('.mic-btn').forEach(b => {
+  b.onclick = () => { if (settings.voiceMode !== 'ptt') voice.mic(); };
+  // segurar pra falar: botão 🎙️ ou tecla V
+  b.addEventListener('pointerdown', (e) => { if (settings.voiceMode === 'ptt') { e.preventDefault(); voice.ptt(true); } });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (settings.voiceMode === 'ptt') voice.ptt(false); }));
+});
+const typing = () => /INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '');
+document.addEventListener('keydown', (e) => { if ((e.key === 'v' || e.key === 'V') && !typing() && settings.voiceMode === 'ptt' && voice.on) voice.ptt(true); });
+document.addEventListener('keyup', (e) => { if (e.key === 'v' || e.key === 'V') voice.ptt(false); });
+window.addEventListener('blur', () => voice.ptt(false));
 
 // ----------------------------- EVENTOS DO SERVIDOR -----------------------------
 const params = new URLSearchParams(location.search);

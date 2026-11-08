@@ -483,3 +483,66 @@ body.noanim *{animation:none!important;transition:none!important}
 .tut-list{margin:0;padding-left:20px;line-height:1.7}
 .tut-nav .btn:not(.big){flex:none}
 #tut-next.pulse{animation:pulseBtn .5s infinite alternate}
+
+/* ===== v0.7: voz ===== */
+#gm-mic.talking{background:#2fae5b;border-color:#7dffb0;box-shadow:0 0 12px #2fae5b}
+#gm-mic{user-select:none;-webkit-user-select:none;touch-action:none}
+.voice-opts{display:flex;flex-direction:column;gap:8px}
+.voice-opts input[type=range]{width:100%}
+
+/* ===== v0.8: meio da mesa livre — tudo vai pros cantos ===== */
+.turn-arrow{display:none!important}
+.midtable{top:55%}
+/* painel do canto superior esquerdo */
+.hud{position:absolute;left:8px;top:8px;z-index:4;display:flex;flex-direction:column;align-items:flex-start;gap:6px;pointer-events:none;max-width:min(300px,58%)}
+.hud .status{font-size:14px;padding:4px 12px 4px 4px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.hud .status:empty{display:none}
+.hud .status.me{font-size:15px;padding:5px 12px;box-shadow:0 0 14px var(--accent)}
+.hud .status .avatar-svg{width:24px}
+.hud-row{display:flex;align-items:center;gap:8px;background:#0008;border-radius:16px;padding:4px 10px}
+.hud .color-dot{width:18px;height:18px;border-width:2px}
+.hud .dir{font-size:20px}
+.hud .pending{font-size:15px;animation:pulse .6s infinite alternate}
+.hud .silence{position:static;transform:none;font-size:13px;padding:2px 10px;border-radius:12px}
+/* cor da vez: brilho em volta da pilha de descarte (dá pra ver sem olhar pro canto) */
+.discard{border-radius:12px;box-shadow:0 0 0 4px var(--cur,#fff),0 0 22px var(--cur,#fff);transition:box-shadow .3s}
+/* tempo da jogada: linha fininha no topo da mesa */
+.table>.timer{position:absolute;left:0;right:0;top:0;width:auto;height:4px;border-radius:0;z-index:4;background:#0004}
+/* avisos das jogadas: canto inferior esquerdo da mesa */
+.feed{left:8px;right:auto;bottom:8px;transform:none;align-items:flex-start;width:min(340px,70%)}
+.feed-item{font-size:13px}
+.feed-item .l2{font-size:14px}.feed-item.fast .l2{font-size:16px}
+.feed-item:not(:first-child){transform-origin:left center}
+/* mensagens rápidas (erro, aviso): canto superior direito */
+.toasts{left:auto;right:10px;top:56px;transform:none;align-items:flex-end;max-width:min(360px,70vw)}
+.toast{font-size:14px;text-align:right}
+@media (max-width:700px),(max-height:560px){
+  .hud .status{font-size:12px}
+  .hud .status.me{font-size:13px}
+  .feed{width:78%}
+  .feed-item{font-size:12px;padding:3px 10px 3px 4px}
+  .toasts{max-width:70vw}
+  .toast{font-size:12.5px;padding:6px 10px}
+}
+.hud .status.me{transform-origin:left center}
+
+/* ===== v0.8: botões de voz claros ===== */
+.vc-pill{font-weight:800;white-space:nowrap}
+.vc-pill.ok{background:#1f6e46;border-color:#2fae5b}
+.vc-pill.off{background:#5a1d20;border-color:#e8474c;color:#ffd1d3}
+.voice-btn{font-weight:800;white-space:nowrap}
+.voice-btn.invite{background:#2fae5b;border-color:#7dffb0;color:#04210f;animation:pulseBtn .7s infinite alternate}
+.vc-big{display:flex;flex-direction:column;gap:8px}
+.vc-big .btn.big{flex:none;text-align:left}
+.tb-right{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
+@media (max-width:520px){
+  .topbar .btn.small{padding:6px 7px;font-size:12.5px}
+  .tb-left #gm-room{display:none}
+}
+.voice-btn.icon-only,.mic-btn,.hear-btn{min-width:40px;display:inline-flex;align-items:center;justify-content:center;padding:6px 9px}
+.mic-btn svg,.hear-btn svg{display:block}
+.mic-btn.off,.hear-btn.off{background:#5a1d20;border-color:#e8474c;color:#ffb3b5}
+.mic-btn.ok,.hear-btn.ok{background:#1f6e46;border-color:#2fae5b;color:#fff}
+.mic-btn.talking{background:#2fae5b;border-color:#7dffb0;color:#04210f;box-shadow:0 0 14px #2fae5b}
+.vc-big .btn svg{vertical-align:-4px;margin-right:4px}
+.tap-audio{font-size:16px;padding:12px 18px}

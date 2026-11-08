@@ -35,7 +35,7 @@
         <button class="menu-btn tut" id="btn-tut"><span class="mi">🎓</span><span class="mt"><b>COMO JOGAR</b><small>Tutorial rápido pra quem tá começando</small></span><span class="chev">›</span></button>
         <button class="menu-btn settings" data-go="scr-settings"><span class="mi">⚙️</span><span class="mt"><b>CONFIGURAÇÕES</b><small>Suas regras, sons, letras e visual</small></span><span class="chev">›</span></button>
       </nav>
-      <div class="muted center tiny">Protótipo v0.6 · nome e cartas originais</div>
+      <div class="muted center tiny">Protótipo v0.9 · nome e cartas originais</div>
     </div>
   </section>
 
@@ -178,6 +178,8 @@
         </div>
         <div class="row gap">
           <button class="btn small voice-btn">🎧 Entrar na voz</button>
+          <button class="btn small vc-pill mic-btn hidden">🎤 Mic ON</button>
+          <button class="btn small vc-pill hear-btn hidden">🔊 Ouvir ON</button>
           <button id="lb-leave" class="btn small danger">Sair</button>
         </div>
       </div>
@@ -211,9 +213,10 @@
     <div class="topbar">
       <div class="tb-left"><b class="logo-s">FH</b> <span id="gm-room"></span></div>
       <div class="tb-right">
-        <button class="btn small voice-btn">🎧</button>
-        <button id="gm-mic" class="btn small hidden">🎤</button>
-        <button id="gm-sound" class="btn small">🔊</button>
+        <button class="btn small voice-btn">🎧 Entrar na voz</button>
+        <button id="gm-mic" class="btn small vc-pill mic-btn hidden">🎤 Mic ON</button>
+        <button id="gm-hear" class="btn small vc-pill hear-btn hidden">🔊 Ouvir ON</button>
+        <button id="gm-sound" class="btn small" title="Música e efeitos do jogo">🎵</button>
         <button id="gm-chat" class="btn small">💬<span id="chat-dot" class="dot hidden"></span></button>
         <button id="gm-menu" class="btn small">⚙️</button>
       </div>
@@ -221,14 +224,17 @@
 
     <div id="table" class="table">
       <div id="seats"></div>
-      <div class="midtable">
+      <div id="timer" class="timer"><div></div></div>
+      <!-- painel do canto: de quem é a vez, cor, sentido, acúmulo e silêncio (fora do meio da mesa) -->
+      <div id="hud" class="hud">
         <div id="status" class="status"></div>
+        <div class="hud-row"><span id="color-dot" class="color-dot" title="Cor da vez"></span><span id="dir" class="dir" title="Sentido do jogo">↻</span><span id="pending" class="pending hidden" title="Cartas acumuladas"></span><span id="silence" class="silence hidden">🤫 Silêncio</span></div>
+      </div>
+      <div class="midtable">
         <div class="piles">
           <div id="draw-pile" class="card back pile" title="Comprar"><span id="draw-count"></span></div>
           <div id="discard" class="discard"></div>
         </div>
-        <div class="row gap center-info"><span id="color-dot" class="color-dot"></span><span id="dir" class="dir">↻</span><span id="pending" class="pending hidden"></span></div>
-        <div id="timer" class="timer"><div></div></div>
       </div>
       <div id="turn-arrow" class="turn-arrow hidden"><span>➤</span></div>
       <div id="slap-layer" class="slap-layer"></div>
@@ -257,7 +263,6 @@
       <button id="btn-slap" class="slap-btn">✋</button>
       <div id="slap-info" class="slap-info"></div>
     </div>
-    <div id="silence" class="silence hidden">🤫 SILÊNCIO DO 7</div>
   </section>
 
   <!-- ================= JANELAS (modal) ================= -->
